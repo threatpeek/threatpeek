@@ -1,14 +1,11 @@
-from fastapi import FastAPI, Request
-from scanner.threat_scanner import ThreatScanner
+from fastapi import FastAPI
+from routes import scan
 
-app = FastAPI(title="ThreatPeek PH", version="0.1")
+app = FastAPI(title="ThreatPeek PH API")
+
+# Register your modular route files here
+app.include_router(scan.router, prefix="/api", tags=["Scan"])
 
 @app.get("/")
-def read_root():
+def root():
     return {"message": "ThreatPeek PH API is live."}
-
-@app.get("/scan/")
-def scan_url(url: str):
-    scanner = ThreatScanner(url)
-    result = scanner.run_all()
-    return result
