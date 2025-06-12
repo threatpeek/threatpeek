@@ -24,8 +24,13 @@ Scan URLs for phishing, malware, and SSL issues, and generate human-friendly thr
 
 ```bash
 # Clone this repo
+HEAD
 git clone https://github.com/erickills/ThreatPeekPH.git
 cd threatpeek-ph
+
+# git clone https://github.com/yourusername/shieldme-ph.git
+# cd shieldme-ph
+359baa5 (Initial commit - FastAPI skeleton for ThreatPeek PH)
 
 # Create and activate virtual environment
 python3 -m venv venv
