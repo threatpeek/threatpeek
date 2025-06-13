@@ -5,6 +5,17 @@ import re
 from urllib.parse import urlparse
 import httpx
 import requests
+import ssl
+import socket
+from datetime import datetime
+from urllib.parse import urlparse
+import certifi
+from logger import logger, log_request
+from datetime import datetime, timezone
+
+
+
+
 router = APIRouter()
 
 
@@ -21,7 +32,33 @@ HEADERS = {
                   "Chrome/115.0.0.0 Safari/537.36"
 }
 
+
+
+def analyze_ssl_cert(hostname: str, port: int = 443) -> tuple[bool, list[str]]:
+    try:
+        context = ssl.create_default_context(cafile=certifi.where())
+        with socket.create_connection((hostname, port), timeout=5) as sock:
+            with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+                cert = ssock.getpeercert()
+                not_after = cert.get('notAfter')
+                if not_after:
+                    exp_date = datetime.strptime(not_after, '%b %d %H:%M:%S %Y %Z').replace(tzinfo=timezone.utc)
+                    if exp_date < datetime.now(timezone.utc):
+
+                        return False, ["SSL certificate expired."]
+                return True, []
+    except ssl.SSLError as e:
+        return False, [f"SSL check failed: {str(e)}"]
+    except Exception as e:
+        return False, [f"SSL check failed: {str(e)}"]
+
+
+
 def enhanced_threat_analysis(url: str) -> tuple[str, str]:
+
+    ssl_valid = True
+    ssl_messages = []
+
     parsed = urlparse(url)
     domain = parsed.netloc.lower()
     path = parsed.path.lower()
@@ -31,6 +68,13 @@ def enhanced_threat_analysis(url: str) -> tuple[str, str]:
 
     if parsed.scheme not in ("http", "https"):
         return "invalid", f"Unsupported URL scheme: {parsed.scheme}"
+    
+    # SSL Certificate Check
+    ssl_valid, ssl_messages = analyze_ssl_cert(domain)
+    if not ssl_valid:
+        return "suspicious", " | ".join(ssl_messages)
+
+
 
     # Pre-request XSS detection — no need to ping server if obvious
     if re.search(r"(<script>|</script>|%3Cscript%3E|%3C%2Fscript%3E)", path, re.IGNORECASE):
@@ -43,7 +87,7 @@ def enhanced_threat_analysis(url: str) -> tuple[str, str]:
         if status_code == 200:
             if len(path) > 100:
                 return "suspicious", "URL path is unusually long — possible obfuscation."
-            return "clean", "No threats detected from HTTP request."
+            return "clean", "No known threat indicators found. URL appears safe."
 
         elif status_code == 403:
             return "suspicious", "URL returned authentication required or forbidden status code 403."
@@ -67,5 +111,14 @@ def enhanced_threat_analysis(url: str) -> tuple[str, str]:
 @router.post("/scan_url", response_model=URLScanResponse)
 async def scan_url(request: URLScanRequest):
     url = str(request.url)
-    status, details = enhanced_threat_analysis(url)
+    logger.info(f"Received scan request for URL: {url}")
+
+    try:
+        status, details = enhanced_threat_analysis(url)
+        log_request(url, status, details)
+    except Exception as e:
+        logger.error(f"Unexpected error scanning URL {url}: {e}", exc_info=True)
+        status = "error"
+        details = "An internal error occurred during URL analysis."
+
     return URLScanResponse(url=url, status=status, details=details)
