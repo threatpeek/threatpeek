@@ -1,24 +1,14 @@
 from fastapi import APIRouter
 from pydantic import HttpUrl
-from models.scan_models import URLScanRequest, URLScanResponse
+from urllib.parse import urlparse
 import re
-from urllib.parse import urlparse
 import httpx
-import requests
-import ssl
-import socket
-from datetime import datetime
-from urllib.parse import urlparse
-import certifi
+from models.scan_models import URLScanRequest, URLScanResponse
 from logger import logger, log_request
-from datetime import datetime, timezone
-
-
-
+from utils.ssl_check import async_ssl_check
+from utils.analysis_helpers import is_high_entropy
 
 router = APIRouter()
-
-
 
 BLACKLISTED_DOMAINS = [
     "badguy.com",
@@ -33,33 +23,9 @@ HEADERS = {
 }
 
 
-
-def analyze_ssl_cert(hostname: str, port: int = 443) -> tuple[bool, list[str]]:
-    try:
-        context = ssl.create_default_context(cafile=certifi.where())
-        with socket.create_connection((hostname, port), timeout=5) as sock:
-            with context.wrap_socket(sock, server_hostname=hostname) as ssock:
-                cert = ssock.getpeercert()
-                not_after = cert.get('notAfter')
-                if not_after:
-                    exp_date = datetime.strptime(not_after, '%b %d %H:%M:%S %Y %Z').replace(tzinfo=timezone.utc)
-                    if exp_date < datetime.now(timezone.utc):
-
-                        return False, ["SSL certificate expired."]
-                return True, []
-    except ssl.SSLError as e:
-        return False, [f"SSL check failed: {str(e)}"]
-    except Exception as e:
-        return False, [f"SSL check failed: {str(e)}"]
-
-
-
-def enhanced_threat_analysis(url: str) -> tuple[str, str]:
-
-    ssl_valid = True
-    ssl_messages = []
-
-    parsed = urlparse(url)
+async def enhanced_threat_analysis(url: str) -> tuple[str, str]:
+    url_str = str(url)
+    parsed = urlparse(url_str)
     domain = parsed.netloc.lower()
     path = parsed.path.lower()
 
@@ -68,57 +34,73 @@ def enhanced_threat_analysis(url: str) -> tuple[str, str]:
 
     if parsed.scheme not in ("http", "https"):
         return "invalid", f"Unsupported URL scheme: {parsed.scheme}"
-    
-    # SSL Certificate Check
-    ssl_valid, ssl_messages = analyze_ssl_cert(domain)
-    if not ssl_valid:
-        return "suspicious", " | ".join(ssl_messages)
 
-
-
-    # Pre-request XSS detection — no need to ping server if obvious
     if re.search(r"(<script>|</script>|%3Cscript%3E|%3C%2Fscript%3E)", path, re.IGNORECASE):
         return "suspicious", "URL path includes potential XSS payload."
 
     try:
-        response = requests.get(url, headers=HEADERS, timeout=5)
-        status_code = response.status_code
+        async with httpx.AsyncClient(timeout=5.0, headers=HEADERS, follow_redirects=True) as client:
+            response = await client.get(url_str)
+            status_code = response.status_code
 
-        if status_code == 200:
-            if len(path) > 100:
-                return "suspicious", "URL path is unusually long — possible obfuscation."
-            return "clean", "No known threat indicators found. URL appears safe."
+            if status_code in (200, 301, 302, 307, 308):
+                if len(path) > 100:
+                    return "suspicious", "URL path is unusually long — possible obfuscation."
+                return "clean", f"URL responded with status code {status_code}. No threat detected."
 
-        elif status_code == 403:
-            return "suspicious", "URL returned authentication required or forbidden status code 403."
+            elif status_code == 403:
+                return "suspicious", "URL returned forbidden (403) — possible restricted content or trap."
 
-        elif status_code == 404:
-            return "suspicious", "URL not found (404) — possibly phishing or dead link."
+            elif status_code == 404:
+                return "suspicious", "URL not found (404) — possibly phishing or abandoned."
 
-        elif status_code == 401 or status_code == 407:
-            return "suspicious", f"URL returned authentication or proxy auth required status code {status_code}."
+            elif status_code in (401, 407):
+                return "suspicious", f"URL returned authentication-required status: {status_code}"
 
-        elif 500 <= status_code < 600:
-            return "suspicious", f"URL returned server error status code {status_code}"
+            elif 500 <= status_code < 600:
+                return "suspicious", f"URL returned server error status code {status_code}"
 
-        else:
-            return "suspicious", f"URL returned unexpected status code {status_code}"
+            else:
+                return "suspicious", f"Unexpected status code {status_code}"
 
-    except requests.RequestException as e:
-        return "suspicious", f"URL unreachable, but no obvious threat indicators. Reason: {e}"
+    except httpx.RequestError as e:
+        return "suspicious", f"Request failed. Reason: {e}"
 
 
 @router.post("/scan_url", response_model=URLScanResponse)
 async def scan_url(request: URLScanRequest):
-    url = str(request.url)
+    url = request.url
+    parsed = urlparse(str(url))
+    domain = parsed.netloc.lower()
+    path = parsed.path.lower()
+
     logger.info(f"Received scan request for URL: {url}")
 
-    try:
-        status, details = enhanced_threat_analysis(url)
-        log_request(url, status, details)
-    except Exception as e:
-        logger.error(f"Unexpected error scanning URL {url}: {e}", exc_info=True)
-        status = "error"
-        details = "An internal error occurred during URL analysis."
+    # SSL Check
+    ssl_ok, ssl_details = await async_ssl_check(domain)
+    if not ssl_ok:
+        msg = " | ".join(ssl_details)
+        logger.warning(f"SSL issue: {msg}")
+        return URLScanResponse(url=url, status="suspicious", details=msg)
 
-    return URLScanResponse(url=url, status=status, details=details)
+    # Entropy Check
+    if is_high_entropy(path):
+        msg = "High entropy in URL path — possible obfuscation."
+        logger.warning(msg)
+        return URLScanResponse(url=url, status="suspicious", details=msg)
+
+    # Content/behavioral analysis
+    try:
+        status, details = await enhanced_threat_analysis(url)
+        log_request(url, status, details)
+        return URLScanResponse(url=str(url), status=status, details=details)
+
+    except Exception as e:
+        logger.error(f"Unexpected error while scanning: {e}", exc_info=True)
+        return URLScanResponse(
+    url=str(url),
+    status="error",
+    details="An internal error occurred during URL analysis."
+)
+
+
