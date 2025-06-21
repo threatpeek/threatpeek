@@ -4,6 +4,7 @@ import socket
 import certifi
 from datetime import datetime, timezone
 import asyncio
+from logger import logger  # ✅ Add this at the top
 
 async def async_ssl_check(hostname: str, port: int = 443) -> tuple[bool, list[str]]:
     loop = asyncio.get_running_loop()
@@ -21,6 +22,9 @@ async def async_ssl_check(hostname: str, port: int = 443) -> tuple[bool, list[st
                             return False, ["SSL certificate expired."]
                     return True, []
         except ssl.SSLError as e:
+            return False, [f"SSL check failed: {str(e)}"]
+        except socket.gaierror as e:
+            logger.warning(f"DNS resolution failed for domain: {hostname}")  # ✅ Add this log
             return False, [f"SSL check failed: {str(e)}"]
         except Exception as e:
             return False, [f"SSL check failed: {str(e)}"]
