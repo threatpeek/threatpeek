@@ -24,29 +24,42 @@ HEADERS = {
 
 
 async def enhanced_threat_analysis(url: str) -> tuple[str, str]:
-    url_str = str(url)
-    parsed = urlparse(url_str)
-    domain = parsed.netloc.lower()
-    path = parsed.path.lower()
+    """
+    Analyze the given URL for potential threats. Automatically resolves redirects
+    and evaluates the final destination.
 
-    if domain in BLACKLISTED_DOMAINS:
-        return "malicious", f"Domain `{domain}` is on the threat blacklist."
+    Args:
+        url (str): The input URL.
 
-    if parsed.scheme not in ("http", "https"):
-        return "invalid", f"Unsupported URL scheme: {parsed.scheme}"
-
-    if re.search(r"(<script>|</script>|%3Cscript%3E|%3C%2Fscript%3E)", path, re.IGNORECASE):
-        return "suspicious", "URL path includes potential XSS payload."
-
+    Returns:
+        tuple[str, str]: Status and details about the URL.
+    """
     try:
         async with httpx.AsyncClient(timeout=5.0, headers=HEADERS, follow_redirects=True) as client:
-            response = await client.get(url_str)
+            response = await client.get(str(url))
+            final_url = str(response.url)  # Get final destination after redirects
+            parsed = urlparse(final_url)
+            domain = parsed.netloc.lower()
+            path = parsed.path.lower()
+
+            logger.info(f"Resolved final URL: {final_url}")
+
+            if domain in BLACKLISTED_DOMAINS:
+                return "malicious", f"Domain `{domain}` is on the threat blacklist."
+
+            if parsed.scheme not in ("http", "https"):
+                return "invalid", f"Unsupported URL scheme: {parsed.scheme}"
+
+            if re.search(r"(<script>|</script>|%3Cscript%3E|%3C%2Fscript%3E)", path, re.IGNORECASE):
+                return "suspicious", "URL path includes potential XSS payload."
+
+            if len(path) > 100:
+                return "suspicious", "URL path is unusually long — possible obfuscation."
+
             status_code = response.status_code
 
             if status_code in (200, 301, 302, 307, 308):
-                if len(path) > 100:
-                    return "suspicious", "URL path is unusually long — possible obfuscation."
-                return "clean", f"URL responded with status code {status_code}. No threat detected."
+                return "clean", f"Final URL responded with status code {status_code}. No threat detected."
 
             elif status_code == 403:
                 return "suspicious", "URL returned forbidden (403) — possible restricted content or trap."
@@ -76,31 +89,41 @@ async def scan_url(request: URLScanRequest):
 
     logger.info(f"Received scan request for URL: {url}")
 
-    # SSL Check
+    # Sanity check domain
+    if not domain or "." not in domain:
+        logger.warning("Malformed URL or missing domain.")
+        return URLScanResponse(
+            url=str(url),
+            status="invalid",
+            details="Malformed URL or missing domain — unable to process."
+        )
+
+    logger.info(f"checking entropy on path: {path}")
+    if is_high_entropy(path):
+        msg = "High entropy in URL path — possible obfuscation."
+        logger.warning(msg)
+        return URLScanResponse(url=str(url), status="suspicious", details=msg)
+    else:
+        logger.info("Path entropy check passed — not suspicious.")
+
+
+    # Proceed with SSL check and enhanced analysis...
     ssl_ok, ssl_details = await async_ssl_check(domain)
     if not ssl_ok:
         msg = " | ".join(ssl_details)
         logger.warning(f"SSL issue: {msg}")
-        return URLScanResponse(url=url, status="suspicious", details=msg)
+        return URLScanResponse(url=str(url), status="suspicious", details=msg)
 
-    # Entropy Check
-    if is_high_entropy(path):
-        msg = "High entropy in URL path — possible obfuscation."
-        logger.warning(msg)
-        return URLScanResponse(url=url, status="suspicious", details=msg)
-
-    # Content/behavioral analysis
     try:
         status, details = await enhanced_threat_analysis(url)
         log_request(url, status, details)
         return URLScanResponse(url=str(url), status=status, details=details)
-
     except Exception as e:
         logger.error(f"Unexpected error while scanning: {e}", exc_info=True)
         return URLScanResponse(
-    url=str(url),
-    status="error",
-    details="An internal error occurred during URL analysis."
-)
+            url=str(url),
+            status="error",
+            details="An internal error occurred during URL analysis."
+        )
 
 
