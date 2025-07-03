@@ -1,81 +1,273 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    
-    <title>ThreatPeek URL Scanner</title>
+  <meta charset="UTF-8" />
+  <title>ThreatPeek PH - URL Scanner</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 50px;
+      background-color: #f9f9f9;
+      color: #222;
+      transition: background-color 0.3s, color 0.3s;
+    }
 
-    <link rel="stylesheet" href="/static/styles.css">
+    #container {
+      max-width: 600px;
+      margin: auto;
+      background-color: white;
+      padding: 30px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      border-radius: 8px;
+      transition: background-color 0.3s, box-shadow 0.3s;
+    }
 
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 50px;
-            background-color: #f9f9f9;
-        }
-        #container {
-            max-width: 600px;
-            margin: auto;
-            background-color: white;
-            padding: 30px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        }   
-        input, button {
-            padding: 10px;
-            width: 100%;
-            margin-top: 10px;
-            font-size: 16px;
-        }
-        #result {
-            margin-top: 20px;
-        }
-        .status {
-            font-weight: bold;
-        }
-    </style>
+    /* Header with flex */
+    #header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    #header h2 {
+      margin: 0;
+    }
+
+    #header label {
+      font-weight: normal;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    /* Controls container flex */
+    #scanControls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    #scanControls input[type="text"] {
+      flex: 1;
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      transition: border-color 0.2s;
+    }
+
+    #scanControls input[type="text"]:focus {
+      outline: none;
+      border-color: #007bff;
+    }
+
+    #scanControls button {
+      min-width: 110px;
+      padding: 10px;
+      font-size: 16px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    #scanControls button:hover {
+      background-color: #0056b3;
+    }
+
+    /* Loader */
+    #loader {
+      display: none;
+      margin-bottom: 15px;
+      font-style: italic;
+      color: #555;
+      text-align: center;
+    }
+
+    /* Result */
+    #result p {
+      margin: 6px 0;
+    }
+
+    .status {
+      font-weight: bold;
+    }
+
+    .status.green {
+      color: green;
+    }
+
+    .status.orange {
+      color: orange;
+    }
+
+    .status.red {
+      color: red;
+    }
+
+    .status.gray {
+      color: gray;
+    }
+
+    /* Copy button */
+    #copyBtn {
+      margin-top: 10px;
+      padding: 8px 12px;
+      font-size: 14px;
+      border-radius: 4px;
+      border: 1px solid #007bff;
+      background-color: white;
+      color: #007bff;
+      cursor: pointer;
+      transition: background-color 0.2s, color 0.2s;
+    }
+
+    #copyBtn:hover {
+      background-color: #007bff;
+      color: white;
+    }
+
+    /* Dark mode */
+    body.dark-mode {
+      background-color: #121212;
+      color: #f0f0f0;
+    }
+
+    body.dark-mode #container {
+      background-color: #1e1e1e;
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+    }
+
+    body.dark-mode #scanControls input[type="text"] {
+      background-color: #2c2c2c;
+      color: #f0f0f0;
+      border: 1px solid #444;
+    }
+
+    body.dark-mode #scanControls button {
+      background-color: #0056b3;
+      color: #f0f0f0;
+      border: none;
+    }
+
+    body.dark-mode #scanControls button:hover {
+      background-color: #003f7f;
+    }
+
+    body.dark-mode #copyBtn {
+      background-color: transparent;
+      border: 1px solid #3399ff;
+      color: #3399ff;
+    }
+
+    body.dark-mode #copyBtn:hover {
+      background-color: #3399ff;
+      color: #121212;
+    }
+  </style>
 </head>
 <body>
-    <div id="container">
-        <h2>ThreatPeek PH - URL Scanner</h2>
-        <!-- Input field for URL -->
-        <input type="text" id="urlInput" placeholder="Enter URL to scan (e.g. https://example.com)" />
-        <!-- Button to trigger scan -->
-        <button onclick="scanUrl()">Scan URL</button>
-        <!-- Result will be displayed here -->
-        <div id="result"></div>
+  <div id="container">
+    <div id="header">
+      <h2>ThreatPeek PH - URL Scanner</h2>
+      <label>
+        🌙 <input type="checkbox" id="darkToggle" onchange="toggleDarkMode()" /> Dark Mode
+      </label>
     </div>
 
-    <script>
-        // Function to scan the URL using the ThreatPeek backend
-        async function scanUrl() {
-            const url = document.getElementById("urlInput").value;
-            const resultDiv = document.getElementById("result");
+    <div id="scanControls">
+      <input type="text" id="urlInput" placeholder="Enter URL to scan (e.g. https://example.com)" />
+      <button onclick="scanUrl()">Scan URL</button>
+    </div>
 
-            // Clear previous result
-            resultDiv.innerHTML = "Scanning...";
+    <div id="loader">🔍 Scanning...</div>
 
-            try {
-                const response = await fetch("/api/scan_url", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({ url: url })
-                });
+    <div id="result">
+      <p><span class="status">Status:</span> <span id="statusText"></span></p>
+      <p><span class="status">Details:</span> <span id="detailsText"></span></p>
+      <button id="copyBtn">📋 Copy Result</button>
+    </div>
+  </div>
 
-                const data = await response.json();
+  <script>
+    function toggleDarkMode() {
+      document.body.classList.toggle("dark-mode");
+    }
 
-                // Display the result of the scan
-                resultDiv.innerHTML = `
-                    <p><span class="status">Status:</span> ${data.status}</p>
-                    <p><span class="status">Details:</span> ${data.details}</p>
-                `;
-            } catch (error) {
-                // Display error if fetch fails
-                resultDiv.innerHTML = `<p style="color:red;">Error: ${error.message}</p>`;
-            }
+    async function scanUrl() {
+      const url = document.getElementById("urlInput").value.trim();
+      const loader = document.getElementById("loader");
+      const statusText = document.getElementById("statusText");
+      const detailsText = document.getElementById("detailsText");
+
+      if (!url) {
+        alert("Please enter a URL.");
+        statusText.textContent = "";
+        detailsText.textContent = "";
+        return;
+      }
+
+      loader.style.display = "block";
+      statusText.textContent = "";
+      detailsText.textContent = "";
+
+      try {
+        const response = await fetch("/api/scan_url", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ url }),
+        });
+
+        const data = await response.json();
+        loader.style.display = "none";
+
+        let colorClass = "";
+        switch (data.status.toLowerCase()) {
+          case "clean":
+            colorClass = "green";
+            break;
+          case "suspicious":
+            colorClass = "orange";
+            break;
+          case "malicious":
+            colorClass = "red";
+            break;
+          case "invalid":
+          case "error":
+            colorClass = "gray";
+            break;
+          default:
+            colorClass = "";
         }
-    </script>
+
+        statusText.textContent = data.status;
+        statusText.className = `status ${colorClass}`;
+        detailsText.textContent = data.details;
+      } catch (error) {
+        loader.style.display = "none";
+        statusText.textContent = "Error";
+        statusText.className = "status red";
+        detailsText.textContent = error.message;
+      }
+    }
+
+    document.getElementById("copyBtn").addEventListener("click", () => {
+      const status = document.getElementById("statusText").textContent;
+      const details = document.getElementById("detailsText").textContent;
+      if (!status && !details) {
+        alert("No scan result to copy.");
+        return;
+      }
+      const fullText = `Status: ${status}\nDetails: ${details}`;
+      navigator.clipboard.writeText(fullText)
+        .then(() => alert("Scan result copied to clipboard!"))
+        .catch((err) => alert("Failed to copy scan result: " + err));
+    });
+  </script>
 </body>
 </html>

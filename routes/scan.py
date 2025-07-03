@@ -7,6 +7,7 @@ from models.scan_models import URLScanRequest, URLScanResponse
 from logger import logger, log_request
 from utils.ssl_check import async_ssl_check
 from utils.analysis_helpers import is_high_entropy
+import socket
 
 router = APIRouter()
 
@@ -80,6 +81,7 @@ async def enhanced_threat_analysis(url: str) -> tuple[str, str]:
         return "suspicious", f"Request failed. Reason: {e}"
 
 
+
 @router.post("/scan_url", response_model=URLScanResponse)
 async def scan_url(request: URLScanRequest):
     url = request.url
@@ -89,13 +91,24 @@ async def scan_url(request: URLScanRequest):
 
     logger.info(f"Received scan request for URL: {url}")
 
-    # Sanity check domain
-    if not domain or "." not in domain:
+    # Basic domain sanity check
+    if not domain or "." not in domain or domain.startswith(".") or domain.endswith("."):
         logger.warning("Malformed URL or missing domain.")
         return URLScanResponse(
             url=str(url),
             status="invalid",
             details="Malformed URL or missing domain — unable to process."
+        )
+
+    # ✅ DNS resolution check before SSL
+    try:
+        socket.gethostbyname(domain)
+    except socket.gaierror:
+        logger.warning(f"DNS resolution failed for domain: {domain}")
+        return URLScanResponse(
+            url=str(url),
+            status="invalid",
+            details=f"DNS resolution failed — domain '{domain}' is unreachable or does not exist."
         )
 
     logger.info(f"checking entropy on path: {path}")
@@ -106,14 +119,14 @@ async def scan_url(request: URLScanRequest):
     else:
         logger.info("Path entropy check passed — not suspicious.")
 
-
-    # Proceed with SSL check and enhanced analysis...
+    # SSL Check
     ssl_ok, ssl_details = await async_ssl_check(domain)
     if not ssl_ok:
         msg = " | ".join(ssl_details)
         logger.warning(f"SSL issue: {msg}")
-        return URLScanResponse(url=str(url), status="suspicious", details=msg)
+        return URLScanResponse(url=str(url), status="suspicious", details=f"SSL check failed: {msg}")
 
+    # Deep analysis
     try:
         status, details = await enhanced_threat_analysis(url)
         log_request(url, status, details)
@@ -125,5 +138,3 @@ async def scan_url(request: URLScanRequest):
             status="error",
             details="An internal error occurred during URL analysis."
         )
-
-
