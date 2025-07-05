@@ -10,9 +10,16 @@ import sys
 import os
 from routes import scan  # or from routes.scan import router as scan_router
 
-
-
 app = FastAPI()
+
+import os
+from fastapi.staticfiles import StaticFiles
+
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+# Register your API routes below as usual
+# app.include_router(scan_router, prefix="/api")
 app.include_router(scan.router, prefix="/api", tags=["Scan"])
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))

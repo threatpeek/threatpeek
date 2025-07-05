@@ -1,9 +1,11 @@
-from pydantic import BaseModel
+from typing import List
+from pydantic import BaseModel, HttpUrl
 
 class URLScanRequest(BaseModel):
-    url: str  # Changed from HttpUrl to str
+    # Accepts a list of URLs (strings) for batch scanning
+    urls: List[str]
 
 class URLScanResponse(BaseModel):
-    url: str
-    status: str
-    details: str
+    url: str        # The URL scanned
+    status: str     # Status like clean, suspicious, malicious, invalid, error
+    details: str    # Explanation/details of the scan result

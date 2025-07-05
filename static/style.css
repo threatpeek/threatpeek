@@ -1,23 +1,170 @@
-from fastapi.staticfiles import StaticFiles
+body {
+  font-family: Arial, sans-serif;
+  margin: 50px;
+  background-color: #f9f9f9;
+  color: #222;
+  transition: background-color 0.3s, color 0.3s;
+}
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+#container {
+  max-width: 900px;
+  margin: auto;
+  background-color: white;
+  padding: 30px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  border-radius: 8px;
+  transition: background-color 0.3s, box-shadow 0.3s;
+}
 
+#header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+#header h2 {
+  margin: 0;
+}
+
+#header label {
+  font-weight: normal;
+  cursor: pointer;
+  user-select: none;
+}
+
+#scanControls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+#scanControls textarea {
+  padding: 10px;
+  font-size: 16px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  resize: vertical;
+  height: 260px;
+  overflow-y: scroll;
+  line-height: 1.4;
+}
+
+#scanControls button {
+  align-self: flex-end;
+  width: auto;
+  padding: 10px 20px;
+  font-size: 16px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+#scanControls button:hover {
+  background-color: #0056b3;
+}
+
+#loader {
+  display: none;
+  margin-bottom: 15px;
+  font-style: italic;
+  color: #555;
+  text-align: center;
+}
+
+#resultTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+#resultTable th,
+#resultTable td {
+  padding: 10px;
+  border: 1px solid #ccc;
+  vertical-align: top;
+  text-align: left;
+  word-break: break-word;
+  white-space: normal;
+}
+
+#resultTable td.status {
+  white-space: nowrap;
+  width: 1%;
+}
+
+.status {
+  font-weight: bold;
+}
+
+.status.green { color: green; }
+.status.orange { color: orange; }
+.status.red { color: red; }
+.status.gray { color: gray; }
 
 #copyBtn {
-    margin-top: 10px;
-    background-color: #007bff;
-    color: white;
-    border: none;
-    cursor: pointer;
-    padding: 8px 12px;
-    border-radius: 4px;
-    font-size: 14px;
-    transition: background-color 0.3s ease;
+  margin-top: 10px;
+  padding: 8px 12px;
+  font-size: 14px;
+  border-radius: 4px;
+  border: 1px solid #007bff;
+  background-color: white;
+  color: #007bff;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
 }
 
 #copyBtn:hover {
-    background-color: #0056b3;
+  background-color: #007bff;
+  color: white;
 }
 
+/* DARK MODE STYLES */
+body.dark-mode {
+  background-color: #121212;
+  color: #f0f0f0;
+}
 
+body.dark-mode #container {
+  background-color: #1e1e1e;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+}
 
+body.dark-mode #scanControls textarea {
+  background-color: #2c2c2c;
+  color: #f0f0f0;
+  border: 1px solid #444;
+}
+
+body.dark-mode #scanControls button {
+  background-color: #0056b3;
+  color: #f0f0f0;
+}
+
+body.dark-mode #scanControls button:hover {
+  background-color: #003f7f;
+}
+
+body.dark-mode #copyBtn {
+  background-color: transparent;
+  border: 1px solid #3399ff;
+  color: #3399ff;
+}
+
+body.dark-mode #copyBtn:hover {
+  background-color: #3399ff;
+  color: #121212;
+}
+
+body.dark-mode #resultTable th,
+body.dark-mode #resultTable td {
+  border: 1px solid #555;
+}
+
+body.dark-mode #resultTable td.status {
+  white-space: nowrap;
+}
