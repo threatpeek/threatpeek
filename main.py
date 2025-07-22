@@ -1,39 +1,35 @@
-from middleware.error_handler import UnifiedErrorHandlerMiddleware
+import os
+import sys
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
-from routes import scan
+from dotenv import load_dotenv  # ✅ Load .env file
+
+from routes import scan  # from routes.scan import router as scan_router
+from middleware.error_handler import UnifiedErrorHandlerMiddleware
 from logger import logger
-import sys
-import os
-from routes import scan  # or from routes.scan import router as scan_router
 
-app = FastAPI()
+# ✅ Load environment variables from .env file
+load_dotenv()
+VT_API_KEY = os.getenv("VT_API_KEY")
 
-import os
-from fastapi.staticfiles import StaticFiles
+# ✅ Debug output to confirm .env loading (you can remove this after confirming)
+print("VT_API_KEY =", VT_API_KEY)
 
-static_dir = os.path.join(os.path.dirname(__file__), "static")
-app.mount("/static", StaticFiles(directory=static_dir), name="static")
-
-# Register your API routes below as usual
-# app.include_router(scan_router, prefix="/api")
-app.include_router(scan.router, prefix="/api", tags=["Scan"])
-
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
+# ✅ Set up FastAPI app
 app = FastAPI(title="ThreatPeek PH API")
 logger.info("Starting ThreatPeek PH API...")
 
-# Mount static files once
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# ✅ Static files (CSS, JS, etc.)
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
-# Templates directory
+# ✅ Templates
 templates = Jinja2Templates(directory="templates")
 
-# Exception handler for validation errors
+# ✅ Custom error handler for validation errors
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     logger.error(f"Validation error: {exc} for request: {request.url}")
@@ -42,21 +38,20 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={"detail": exc.errors(), "body": exc.body},
     )
 
-# Add custom error handling middleware
+# ✅ Custom middleware for handling errors
 app.add_middleware(UnifiedErrorHandlerMiddleware)
 
-# Register API routes
+# ✅ Register routes
 app.include_router(scan.router, prefix="/api", tags=["Scan"])
 logger.info("Scan routes registered under /api")
 
-# Dashboard route
+# ✅ Dashboard route
 @app.get("/dashboard", response_class=HTMLResponse)
 async def serve_dashboard(request: Request):
     logger.info("Dashboard accessed.")
-    # Optional: Add user data here if needed
     return templates.TemplateResponse(request, "threatpeek_frontend.html", {"request": request})
 
-# Root route
+# ✅ Root health check
 @app.get("/")
 def root():
     logger.info("Root endpoint accessed.")
