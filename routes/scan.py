@@ -31,7 +31,7 @@ VT_API_KEY = os.getenv("VT_API_KEY")
 VT_BASE_URL = "https://www.virustotal.com/api/v3/urls"
 
 
-async def query_virustotal(url: str) -> tuple[str, str]:
+async def query_virustotal(url: str) -> tuple[str, str, dict]:
     try:
         async with httpx.AsyncClient() as client:
             headers = {
@@ -46,7 +46,7 @@ async def query_virustotal(url: str) -> tuple[str, str]:
             )
 
             if post_resp.status_code != 200:
-                return "suspicious", f"VirusTotal POST failed: {post_resp.status_code}"
+                return "suspicious", f"VirusTotal POST failed: {post_resp.status_code}", {}
 
             # Step 2: Encode the URL for GET request
             url_bytes = url.encode("utf-8")
@@ -56,22 +56,34 @@ async def query_virustotal(url: str) -> tuple[str, str]:
             get_resp = await client.get(f"{VT_BASE_URL}/{b64_url}", headers=headers)
 
             if get_resp.status_code != 200:
-                return "suspicious", f"VirusTotal GET failed: {get_resp.status_code}"
+                return "suspicious", f"VirusTotal GET failed: {get_resp.status_code}", {}
 
             result = get_resp.json()
             stats = result["data"]["attributes"]["last_analysis_stats"]
+            vendor_results = result["data"]["attributes"]["last_analysis_results"]
+            
+
+            
             malicious_count = stats.get("malicious", 0)
             suspicious_count = stats.get("suspicious", 0)
 
             if malicious_count > 0:
-                return "malicious", f"VirusTotal flagged as malicious by {malicious_count} engines."
+                status = "malicious"
+                detail = f"VirusTotal flagged as malicious by {malicious_count} engines."
             elif suspicious_count > 0:
-                return "suspicious", f"VirusTotal flagged as suspicious by {suspicious_count} engines."
+                status = "suspicious"
+                detail = f"VirusTotal flagged as suspicious by {suspicious_count} engines."
             else:
-                return "clean", "VirusTotal scan found no threats."
+                status = "clean"
+                detail = "VirusTotal scan found no threats."
+
+            # Collect vendor verdicts
+            vendors = {vendor: res["category"] for vendor, res in vendor_results.items()}
+            logger.info(f"VENDORS: {vendors}")
+            return status, detail, vendors
 
     except Exception as e:
-        return "suspicious", f"VirusTotal query failed: {e}"
+        return "suspicious", f"VirusTotal query failed: {e}", {}
 
 
 async def enhanced_threat_analysis(url: str) -> tuple[str, str]:
@@ -169,10 +181,15 @@ async def scan_urls(request: URLScanRequest):
             continue
 
         # Step 4: VirusTotal threat intelligence
-        vt_status, vt_detail = await query_virustotal(url)
+        vt_status, vt_detail, vt_vendors = await query_virustotal(url)
         if vt_status in ["malicious", "suspicious"]:
             log_request(url, vt_status, vt_detail)
-            results.append(URLScanResponse(url=url, status=vt_status, details=vt_detail))
+            results.append(URLScanResponse(
+                url=url,
+                status=vt_status,
+                details=vt_detail,
+                vendors=vt_vendors  # Return vendor verdicts to frontend
+            ))
             continue
 
         # Step 5: Local enhanced analysis

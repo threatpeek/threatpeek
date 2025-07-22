@@ -1,11 +1,11 @@
-from typing import List
-from pydantic import BaseModel, HttpUrl
+from typing import Optional, Dict
+from pydantic import BaseModel
 
 class URLScanRequest(BaseModel):
-    # Accepts a list of URLs (strings) for batch scanning
-    urls: List[str]
+    urls: list[str]
 
 class URLScanResponse(BaseModel):
-    url: str        # The URL scanned
-    status: str     # Status like clean, suspicious, malicious, invalid, error
-    details: str    # Explanation/details of the scan result
+    url: str
+    status: str
+    details: str
+    vendors: Optional[Dict[str, str]] = None  # Add this field for vendor verdicts

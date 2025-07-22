@@ -68,24 +68,31 @@
         loader.style.display = "none";
 
         data.forEach(result => {
-          const colorClass = {
-            clean: "green",
-            suspicious: "orange",
-            malicious: "red",
-            invalid: "gray",
-            error: "gray"
-          }[result.status.toLowerCase()] || "";
+  const colorClass = {
+    clean: "green",
+    suspicious: "orange",
+    malicious: "red",
+    invalid: "gray",
+    error: "gray"
+  }[result.status.toLowerCase()] || "";
 
-          const row = document.createElement("tr");
+  let vendorsHtml = "";
+  if (result.vendors && Object.keys(result.vendors).length > 0) {
+    vendorsHtml = '<br><b>VirusTotal Vendors:</b><ul style="margin:0">';
+    for (const [vendor, verdict] of Object.entries(result.vendors)) {
+      vendorsHtml += `<li>${vendor}: ${verdict}</li>`;
+    }
+    vendorsHtml += "</ul>";
+  }
 
-          row.innerHTML = `
-            <td>${result.url}</td>
-            <td class="status ${colorClass}">${result.status}</td>
-            <td>${result.details}</td>
-          `;
-
-          tbody.appendChild(row);
-        });
+  const row = document.createElement("tr");
+  row.innerHTML = `
+    <td>${result.url}</td>
+    <td class="status ${colorClass}">${result.status}</td>
+    <td>${result.details}${vendorsHtml}</td>
+  `;
+  tbody.appendChild(row);
+});
 
       } catch (error) {
         loader.style.display = "none";
