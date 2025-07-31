@@ -1,3 +1,4 @@
+/* Base Styles */
 body {
   font-family: Arial, sans-serif;
   margin: 50px;
@@ -33,6 +34,7 @@ body {
   user-select: none;
 }
 
+/* Scan Controls */
 #scanControls {
   display: flex;
   flex-direction: column;
@@ -49,6 +51,16 @@ body {
   height: 260px;
   overflow-y: scroll;
   line-height: 1.4;
+}
+
+#scanControls input[type="file"] {
+  font-size: 14px;
+}
+
+#scanControls small {
+  color: #666;
+  font-size: 13px;
+  margin-top: -6px;
 }
 
 #scanControls button {
@@ -68,14 +80,47 @@ body {
   background-color: #0056b3;
 }
 
+/* 🔄 Loader Animation */
 #loader {
   display: none;
-  margin-bottom: 15px;
-  font-style: italic;
-  color: #555;
+  margin: 20px auto;
   text-align: center;
+  animation: fadeIn 0.5s ease-in-out;
 }
 
+.spinner {
+  display: inline-block;
+  width: 40px;
+  height: 40px;
+  border: 4px solid #007bff;
+  border-top: 4px solid transparent;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+  margin-bottom: 10px;
+}
+
+.loader-text {
+  font-style: italic;
+  color: #555;
+  font-size: 1.1em;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* Table Styling */
 #resultTable {
   width: 100%;
   border-collapse: collapse;
@@ -97,6 +142,7 @@ body {
   width: 1%;
 }
 
+/* Status Coloring */
 .status {
   font-weight: bold;
 }
@@ -106,8 +152,16 @@ body {
 .status.red { color: red; }
 .status.gray { color: gray; }
 
-#copyBtn {
-  margin-top: 10px;
+/* Export Buttons */
+#exportControls {
+  margin-top: 15px;
+  display: flex;
+  gap: 10px;
+}
+
+#copyBtn,
+#exportCsvBtn,
+#exportJsonBtn {
   padding: 8px 12px;
   font-size: 14px;
   border-radius: 4px;
@@ -118,12 +172,28 @@ body {
   transition: background-color 0.2s, color 0.2s;
 }
 
-#copyBtn:hover {
+#copyBtn:hover,
+#exportCsvBtn:hover,
+#exportJsonBtn:hover {
   background-color: #007bff;
   color: white;
 }
 
-/* DARK MODE STYLES */
+/* Vendor Details Dropdown */
+details summary {
+  cursor: pointer;
+  color: #007BFF;
+  margin-top: 6px;
+  font-size: 0.9em;
+}
+
+details ul {
+  margin: 6px 0 0 0;
+  padding-left: 18px;
+  font-size: 0.9em;
+}
+
+/* 🌙 DARK MODE */
 body.dark-mode {
   background-color: #121212;
   color: #f0f0f0;
@@ -149,13 +219,17 @@ body.dark-mode #scanControls button:hover {
   background-color: #003f7f;
 }
 
-body.dark-mode #copyBtn {
+body.dark-mode #copyBtn,
+body.dark-mode #exportCsvBtn,
+body.dark-mode #exportJsonBtn {
   background-color: transparent;
   border: 1px solid #3399ff;
   color: #3399ff;
 }
 
-body.dark-mode #copyBtn:hover {
+body.dark-mode #copyBtn:hover,
+body.dark-mode #exportCsvBtn:hover,
+body.dark-mode #exportJsonBtn:hover {
   background-color: #3399ff;
   color: #121212;
 }
@@ -165,6 +239,6 @@ body.dark-mode #resultTable td {
   border: 1px solid #555;
 }
 
-body.dark-mode #resultTable td.status {
-  white-space: nowrap;
+body.dark-mode details summary {
+  color: #66b2ff;
 }

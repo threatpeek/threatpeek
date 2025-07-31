@@ -4,6 +4,26 @@
   <meta charset="UTF-8" />
   <title>ThreatPeek PH - URL Scanner</title>
   <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    .vendor-toggle {
+      margin-top: 4px;
+      cursor: pointer;
+      color: #007BFF;
+      background: none;
+      border: none;
+      font-size: 0.9em;
+      padding: 0;
+    }
+
+    .vendor-list {
+      display: none;
+      margin-top: 5px;
+    }
+
+    .vendor-list.active {
+      display: block;
+    }
+  </style>
 </head>
 <body>
   <div id="container">
@@ -16,10 +36,15 @@
 
     <div id="scanControls">
       <textarea id="urlInput" placeholder="Enter URLs (one per line or comma-separated)"></textarea>
+      <input type="file" id="urlFileInput" accept=".txt,.csv" />
+      <small>Upload a .txt or .csv file with one URL per line or comma-separated</small>
       <button onclick="scanUrl()">Scan URLs</button>
     </div>
-
-    <div id="loader">🔍 Scanning...</div>
+    
+  <div id="loader" class="loader-container">
+  <div class="spinner"></div>
+  <p>Scanning URLs... Please wait</p>
+</div>
 
     <div id="resultTableWrapper">
       <table id="resultTable">
@@ -34,96 +59,146 @@
       </table>
     </div>
 
-    <button id="copyBtn">📋 Copy Result</button>
+    <div id="exportControls">
+      <button id="copyBtn">📋 Copy</button>
+      <button id="exportCsvBtn">📄 Export CSV</button>
+      <button id="exportJsonBtn">🧾 Export JSON</button>
+    </div>
   </div>
 
   <script>
-    function toggleDarkMode() {
-      document.body.classList.toggle("dark-mode");
-    }
+function toggleDarkMode() {
+  document.body.classList.toggle("dark-mode");
+}
 
-    async function scanUrl() {
-      const input = document.getElementById("urlInput").value.trim();
-      const loader = document.getElementById("loader");
-      const tbody = document.querySelector("#resultTable tbody");
+async function scanUrl() {
+  const input = document.getElementById("urlInput").value.trim();
+  const loader = document.getElementById("loader");
+  const tbody = document.querySelector("#resultTable tbody");
 
-      if (!input) {
-        alert("Please enter at least one URL.");
-        return;
-      }
-
-      loader.style.display = "block";
-      tbody.innerHTML = "";
-
-      const urls = input.split(/[\n,]+/).map(url => url.trim()).filter(Boolean);
-
-      try {
-        const response = await fetch("/api/scan_urls", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ urls })
-        });
-
-        const data = await response.json();
-        loader.style.display = "none";
-
-        data.forEach(result => {
-  const colorClass = {
-    clean: "green",
-    suspicious: "orange",
-    malicious: "red",
-    invalid: "gray",
-    error: "gray"
-  }[result.status.toLowerCase()] || "";
-
-  let vendorsHtml = "";
-  if (result.vendors && Object.keys(result.vendors).length > 0) {
-    vendorsHtml = '<br><b>VirusTotal Vendors:</b><ul style="margin:0">';
-    for (const [vendor, verdict] of Object.entries(result.vendors)) {
-      vendorsHtml += `<li>${vendor}: ${verdict}</li>`;
-    }
-    vendorsHtml += "</ul>";
+  if (!input) {
+    alert("Please enter at least one URL.");
+    return;
   }
 
-  const row = document.createElement("tr");
-  row.innerHTML = `
-    <td>${result.url}</td>
-    <td class="status ${colorClass}">${result.status}</td>
-    <td>${result.details}${vendorsHtml}</td>
-  `;
-  tbody.appendChild(row);
+  loader.style.display = "block";
+  tbody.innerHTML = "";
+
+  const urls = input.split(/[\n,]+/).map(url => url.trim()).filter(Boolean);
+
+  try {
+    const response = await fetch("/api/scan_urls", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ urls })
+    });
+
+    const data = await response.json();
+    loader.style.display = "none";
+
+    data.forEach(result => {
+      const colorClass = {
+        clean: "green",
+        suspicious: "orange",
+        malicious: "red",
+        invalid: "gray",
+        error: "gray"
+      }[result.status.toLowerCase()] || "";
+
+      let vendorsHtml = "";
+      if ((result.status === "malicious" || result.status === "suspicious") &&
+          result.vendors && Object.keys(result.vendors).length > 0) {
+        vendorsHtml += `
+          <details>
+            <summary>🧪 Show Vendor Details</summary>
+            <ul style="margin: 0;">
+              ${Object.entries(result.vendors).map(([v, d]) => `<li>${v}: ${d}</li>`).join("")}
+            </ul>
+          </details>
+        `;
+      }
+
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${result.url}</td>
+        <td class="status ${colorClass}">${result.status}</td>
+        <td>${result.details}${vendorsHtml}</td>
+      `;
+      tbody.appendChild(row);
+    });
+
+    window.latestScanResults = data; // Save to global for export
+
+  } catch (error) {
+    loader.style.display = "none";
+    const row = document.createElement("tr");
+    row.innerHTML = `<td colspan="3" class="status red">Error: ${error.message}</td>`;
+    tbody.appendChild(row);
+  }
+}
+
+document.getElementById("copyBtn").addEventListener("click", () => {
+  const rows = document.querySelectorAll("#resultTable tbody tr");
+  if (!rows.length) return alert("No scan result to copy.");
+
+  let output = "";
+  rows.forEach(row => {
+    const cells = row.querySelectorAll("td");
+    const line = Array.from(cells).map(cell => cell.innerText.trim()).join(" | ");
+    output += line + "\n";
+  });
+
+  navigator.clipboard.writeText(output)
+    .then(() => alert("Scan results copied to clipboard!"))
+    .catch(err => alert("Copy failed: " + err));
 });
 
-      } catch (error) {
-        loader.style.display = "none";
-        const row = document.createElement("tr");
-        row.innerHTML = `<td colspan="3" class="status red">Error: ${error.message}</td>`;
-        tbody.appendChild(row);
-      }
+document.getElementById("exportCsvBtn").addEventListener("click", () => {
+  if (!window.latestScanResults || !window.latestScanResults.length) {
+    return alert("No scan results to export.");
+  }
+
+  const rows = [
+    ["URL", "Status", "Details"]
+  ];
+
+  window.latestScanResults.forEach(result => {
+    let details = result.details || "";
+    if (result.vendors) {
+      const vendorLines = Object.entries(result.vendors)
+        .map(([vendor, verdict]) => `${vendor}: ${verdict}`)
+        .join("; ");
+      details += ` | Vendors: ${vendorLines}`;
     }
+    rows.push([result.url, result.status, details]);
+  });
 
-    document.getElementById("copyBtn").addEventListener("click", () => {
-      const rows = document.querySelectorAll("#resultTable tbody tr");
-      if (!rows.length) return alert("No scan result to copy.");
+  const csvContent = rows.map(r => r.map(field => `"${field.replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "threatpeek_results.csv";
+  link.click();
+});
 
-      let output = "";
-      rows.forEach(row => {
-        const cells = row.querySelectorAll("td");
-        const line = Array.from(cells).map(cell => cell.innerText).join(" | ");
-        output += line + "\n";
-      });
+document.getElementById("exportJsonBtn").addEventListener("click", () => {
+  if (!window.latestScanResults || !window.latestScanResults.length) {
+    return alert("No scan results to export.");
+  }
 
-      navigator.clipboard.writeText(output)
-        .then(() => alert("Scan results copied to clipboard!"))
-        .catch(err => alert("Copy failed: " + err));
-    });
+  const blob = new Blob([JSON.stringify(window.latestScanResults, null, 2)], { type: "application/json" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "threatpeek_results.json";
+  link.click();
+});
 
-    document.getElementById("urlInput").addEventListener("keydown", function (event) {
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        scanUrl();
-      }
-    });
-  </script>
+document.getElementById("urlInput").addEventListener("keydown", function (event) {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    scanUrl();
+  }
+});
+</script>
 </body>
 </html>
