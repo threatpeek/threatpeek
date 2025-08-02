@@ -2,51 +2,115 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>ThreatPeek PH - URL Scanner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="ThreatPeek PH - A powerful URL security scanner to detect phishing, malware, and SSL issues" />
+  <meta name="author" content="ThreatPeek PH" />
+  <title>ThreatPeek PH - URL Security Scanner</title>
   <link rel="stylesheet" href="/static/style.css" />
-  <style>
-    .vendor-toggle {
-      margin-top: 4px;
-      cursor: pointer;
-      color: #007BFF;
-      background: none;
-      border: none;
-      font-size: 0.9em;
-      padding: 0;
-    }
-
-    .vendor-list {
-      display: none;
-      margin-top: 5px;
-    }
-
-    .vendor-list.active {
-      display: block;
-    }
-  </style>
+  <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div id="container">
     <div id="header">
-      <h2>ThreatPeek PH - URL Scanner</h2>
-      <label>
-        🌙 <input type="checkbox" id="darkToggle" onchange="toggleDarkMode()" /> Dark Mode
-      </label>
+      <div class="header-content">
+        <h1 class="app-title">🛡️ ThreatPeek PH</h1>
+        <p class="app-subtitle">Advanced URL Security Scanner</p>
+      </div>
+      <div class="header-controls">
+        <button id="darkModeToggle" class="dark-mode-btn" onclick="toggleDarkMode()">
+          <span class="dark-mode-icon">🌙</span>
+          <span class="dark-mode-text">Dark Mode</span>
+        </button>
+      </div>
     </div>
 
     <div id="scanControls">
-      <textarea id="urlInput" placeholder="Enter URLs (one per line or comma-separated)"></textarea>
-      <input type="file" id="urlFileInput" accept=".txt,.csv" />
-      <small>Upload a .txt or .csv file with one URL per line or comma-separated</small>
-      <button onclick="scanUrl()">Scan URLs</button>
+      <div class="input-section">
+        <label for="urlInput">🔗 Enter URLs to scan:</label>
+        <textarea 
+          id="urlInput" 
+          placeholder="Examples:&#10;https://example.com&#10;suspicious-site.com&#10;http://malware-check.org" 
+          rows="6"
+          maxlength="10000">
+        </textarea>
+        <div class="input-help">
+          <small>💡 Separate multiple URLs with new lines or commas. Maximum 10 URLs per scan.</small>
+        </div>
+      </div>
+      
+      <div class="file-section">
+        <label for="urlFileInput">📁 Or upload a file:</label>
+        <div class="file-input-wrapper">
+          <input type="file" id="urlFileInput" accept=".txt,.csv" />
+          <span class="file-help">Supported: .txt, .csv files</span>
+        </div>
+      </div>
+      
+      <div class="scan-button-wrapper">
+        <button id="scanButton" onclick="scanUrl()" class="scan-btn">🛡️ Start Security Scan</button>
+      </div>
     </div>
-    
-  <div id="loader" class="loader-container">
-  <div class="spinner"></div>
-  <p>Scanning URLs... Please wait</p>
-</div>
 
-    <div id="resultTableWrapper">
+    <div id="loader">
+      <div class="progress-container">
+        <div class="progress-bar" id="progressBar"></div>
+        <span class="progress-text" id="progressText">0%</span>
+      </div>
+    </div>
+
+    <div id="scanSummary" style="display: none;">
+      <div class="summary-stats">
+        <div class="stat-item">
+          <span class="stat-number" id="totalUrls">0</span>
+          <span class="stat-label">Total URLs</span>
+        </div>
+        <div class="stat-item clean">
+          <span class="stat-number" id="cleanCount">0</span>
+          <span class="stat-label">Clean</span>
+        </div>
+        <div class="stat-item suspicious">
+          <span class="stat-number" id="suspiciousCount">0</span>
+          <span class="stat-label">Suspicious</span>
+        </div>
+        <div class="stat-item malicious">
+          <span class="stat-number" id="maliciousCount">0</span>
+          <span class="stat-label">Malicious</span>
+        </div>
+        <div class="stat-item invalid">
+          <span class="stat-number" id="invalidCount">0</span>
+          <span class="stat-label">Invalid</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts Section -->
+    <div id="chartsSection" style="display: none;">
+      <div class="charts-container">
+        <div class="chart-wrapper">
+          <h3>📊 Scan Results Distribution</h3>
+          <canvas id="scanChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search and Filter Section -->
+    <div id="searchFilters" style="display: none;">
+      <div class="filters-container">
+        <div class="search-box">
+          <input type="text" id="searchInput" placeholder="🔍 Search URLs or details..." />
+        </div>
+        <div class="filter-buttons">
+          <button class="filter-btn active" data-filter="all">All</button>
+          <button class="filter-btn" data-filter="clean">Clean</button>
+          <button class="filter-btn" data-filter="suspicious">Suspicious</button>
+          <button class="filter-btn" data-filter="malicious">Malicious</button>
+          <button class="filter-btn" data-filter="invalid">Invalid</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="resultTableWrapper" style="display: none;">
       <table id="resultTable">
         <thead>
           <tr>
@@ -59,146 +123,537 @@
       </table>
     </div>
 
-    <div id="exportControls">
+    <div id="exportControls" style="display: none;">
       <button id="copyBtn">📋 Copy</button>
       <button id="exportCsvBtn">📄 Export CSV</button>
       <button id="exportJsonBtn">🧾 Export JSON</button>
     </div>
   </div>
 
+  <!-- Drag and Drop Overlay -->
+  <div id="dragOverlay" class="drag-overlay">
+    <div class="drag-message">
+      <div class="drag-icon">📁</div>
+      <div class="drag-text">Drop your file here</div>
+      <div class="drag-subtext">Supported: .txt, .csv files</div>
+    </div>
+  </div>
+
+  <!-- Toast Notifications -->
+  <div id="toastContainer" class="toast-container"></div>
+
   <script>
-function toggleDarkMode() {
-  document.body.classList.toggle("dark-mode");
-}
+    function toggleDarkMode() {
+      const body = document.body;
+      const isDarkMode = body.classList.toggle("dark-mode");
+      const toggle = document.getElementById('darkModeToggle');
+      const icon = toggle.querySelector('.dark-mode-icon');
+      const text = toggle.querySelector('.dark-mode-text');
+      
+      if (isDarkMode) {
+        localStorage.setItem('darkMode', 'enabled');
+        icon.textContent = '☀️';
+        text.textContent = 'Light Mode';
+        toggle.classList.add('active');
+      } else {
+        localStorage.setItem('darkMode', 'disabled');
+        icon.textContent = '🌙';
+        text.textContent = 'Dark Mode';
+        toggle.classList.remove('active');
+      }
+      
+      // Update chart if it exists
+      if (window.currentChart) {
+        updateChartTheme();
+      }
+    }
+    
+    // Initialize dark mode from localStorage
+    function initializeDarkMode() {
+      const darkMode = localStorage.getItem('darkMode');
+      const toggle = document.getElementById('darkModeToggle');
+      const icon = toggle.querySelector('.dark-mode-icon');
+      const text = toggle.querySelector('.dark-mode-text');
+      
+      if (darkMode === 'enabled') {
+        document.body.classList.add('dark-mode');
+        icon.textContent = '☀️';
+        text.textContent = 'Light Mode';
+        toggle.classList.add('active');
+      }
+    }
+    
+    // Update chart theme when dark mode changes
+    function updateChartTheme() {
+      if (window.currentChart) {
+        const isDarkMode = document.body.classList.contains('dark-mode');
+        window.currentChart.options.plugins.legend.labels.color = isDarkMode ? '#e6edf3' : '#333';
+        window.currentChart.options.plugins.tooltip.backgroundColor = isDarkMode ? '#21262d' : '#fff';
+        window.currentChart.options.plugins.tooltip.borderColor = isDarkMode ? '#30363d' : '#ddd';
+        window.currentChart.options.plugins.tooltip.titleColor = isDarkMode ? '#e6edf3' : '#000';
+        window.currentChart.options.plugins.tooltip.bodyColor = isDarkMode ? '#e6edf3' : '#000';
+        window.currentChart.update('none');
+      }
+    }
 
-async function scanUrl() {
-  const input = document.getElementById("urlInput").value.trim();
-  const loader = document.getElementById("loader");
-  const tbody = document.querySelector("#resultTable tbody");
+    async function scanUrl() {
+      const textareaValue = document.getElementById("urlInput").value.trim();
+      const fileInput = document.getElementById("urlFileInput");
+      const loader = document.getElementById("loader");
+      const tbody = document.querySelector("#resultTable tbody");
 
-  if (!input) {
-    alert("Please enter at least one URL.");
-    return;
-  }
+      let urls = [];
 
-  loader.style.display = "block";
-  tbody.innerHTML = "";
-
-  const urls = input.split(/[\n,]+/).map(url => url.trim()).filter(Boolean);
-
-  try {
-    const response = await fetch("/api/scan_urls", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ urls })
-    });
-
-    const data = await response.json();
-    loader.style.display = "none";
-
-    data.forEach(result => {
-      const colorClass = {
-        clean: "green",
-        suspicious: "orange",
-        malicious: "red",
-        invalid: "gray",
-        error: "gray"
-      }[result.status.toLowerCase()] || "";
-
-      let vendorsHtml = "";
-      if ((result.status === "malicious" || result.status === "suspicious") &&
-          result.vendors && Object.keys(result.vendors).length > 0) {
-        vendorsHtml += `
-          <details>
-            <summary>🧪 Show Vendor Details</summary>
-            <ul style="margin: 0;">
-              ${Object.entries(result.vendors).map(([v, d]) => `<li>${v}: ${d}</li>`).join("")}
-            </ul>
-          </details>
-        `;
+      // From textarea
+      if (textareaValue) {
+        urls = urls.concat(
+          textareaValue.split(/[\n,]+/).map(url => url.trim()).filter(Boolean)
+        );
       }
 
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td>${result.url}</td>
-        <td class="status ${colorClass}">${result.status}</td>
-        <td>${result.details}${vendorsHtml}</td>
-      `;
-      tbody.appendChild(row);
+      // From uploaded file
+      if (fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+        const text = await file.text();
+        const fileUrls = text.split(/[\n,]+/).map(url => url.trim()).filter(Boolean);
+        urls = urls.concat(fileUrls);
+        console.log("Parsed from file:", fileUrls);
+      }
+
+      console.log("URLs to scan:", urls);
+
+      if (urls.length === 0) {
+        alert("Please enter or upload at least one URL.");
+        return;
+      }
+
+      // Disable scan button and show progress
+      const scanBtn = document.getElementById('scanButton');
+      scanBtn.disabled = true;
+      scanBtn.textContent = '⏳ Scanning...';
+      
+      loader.style.display = "block";
+      tbody.innerHTML = "";
+      
+      // Reset and start progress bar
+      updateProgress(0, urls.length);
+      
+      // Simulate progress updates
+      simulateProgress(urls.length);
+
+      try {
+        const response = await fetch("/api/scan_urls", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ urls })
+        });
+
+        const data = await response.json();
+        
+        // Complete progress bar
+        if (window.progressInterval) {
+          clearInterval(window.progressInterval);
+        }
+        updateProgress(100, 100);
+        
+        // Small delay to show 100% before hiding loader
+        setTimeout(() => {
+          loader.style.display = "none";
+        }, 500);
+
+        currentScanResults = data;
+
+        data.forEach(result => {
+          const colorClass = {
+            clean: "green",
+            suspicious: "orange",
+            malicious: "red",
+            invalid: "gray",
+            error: "gray"
+          }[result.status.toLowerCase()] || "";
+
+          let vendorsHtml = "";
+          if ((result.status === "malicious" || result.status === "suspicious") &&
+              result.vendors && Object.keys(result.vendors).length > 0) {
+            vendorsHtml += `
+              <details>
+                <summary>🧪 Show Vendor Details</summary>
+                <ul style="margin: 0;">
+                  ${Object.entries(result.vendors).map(([v, d]) => `<li>${v}: ${d}</li>`).join("")}
+                </ul>
+              </details>
+            `;
+          }
+
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${result.url}</td>
+            <td class="status ${colorClass}">${result.status}</td>
+            <td>${result.details}${vendorsHtml}</td>
+          `;
+          tbody.appendChild(row);
+        });
+        
+        // Update scan summary statistics
+        const stats = updateScanSummary(data);
+        
+        // Display chart and enable search/filters
+        displayChart(stats);
+        document.getElementById('searchFilters').style.display = 'block';
+        
+        // Show success toast
+        showToast(`Scan completed! Found ${stats.malicious + stats.suspicious} potential threats`, 'success');
+        
+        // Display results table and export controls
+        document.getElementById('resultTableWrapper').style.display = 'block';
+        document.getElementById('exportControls').style.display = 'flex';
+        
+        // Re-enable scan button
+        scanBtn.disabled = false;
+        scanBtn.textContent = '🛡️ Start Security Scan';
+
+      } catch (error) {
+        loader.style.display = "none";
+        const row = document.createElement("tr");
+        row.innerHTML = `<td colspan="3" class="status red">Error: ${error.message}</td>`;
+        tbody.appendChild(row);
+      }
+
+      fileInput.value = "";
+    }
+
+    let currentScanResults = [];
+
+    document.getElementById('copyBtn').addEventListener('click', function() {
+      if (currentScanResults.length === 0) {
+        alert('No scan results to copy. Please run a scan first.');
+        return;
+      }
+
+      const textData = currentScanResults.map(result => {
+        return `URL: ${result.url}\nStatus: ${result.status}\nDetails: ${result.details}\n${'-'.repeat(50)}`;
+      }).join('\n');
+
+      navigator.clipboard.writeText(textData).then(() => {
+        const btn = document.getElementById('copyBtn');
+        const originalText = btn.textContent;
+        btn.textContent = '✅ Copied!';
+        btn.style.backgroundColor = '#28a745';
+        btn.style.color = 'white';
+
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.style.backgroundColor = '';
+          btn.style.color = '';
+        }, 2000);
+      }).catch(err => {
+        alert('Failed to copy to clipboard: ' + err.message);
+      });
     });
 
-    window.latestScanResults = data; // Save to global for export
+    document.getElementById('exportCsvBtn').addEventListener('click', function() {
+      if (currentScanResults.length === 0) {
+        alert('No scan results to export. Please run a scan first.');
+        return;
+      }
 
-  } catch (error) {
-    loader.style.display = "none";
-    const row = document.createElement("tr");
-    row.innerHTML = `<td colspan="3" class="status red">Error: ${error.message}</td>`;
-    tbody.appendChild(row);
-  }
-}
+      const csvHeader = 'URL,Status,Details,Timestamp\n';
+      const csvRows = currentScanResults.map(result => {
+        const timestamp = new Date().toISOString();
+        const cleanDetails = result.details.replace(/"/g, '""');
+        return `"${result.url}","${result.status}","${cleanDetails}","${timestamp}"`;
+      }).join('\n');
 
-document.getElementById("copyBtn").addEventListener("click", () => {
-  const rows = document.querySelectorAll("#resultTable tbody tr");
-  if (!rows.length) return alert("No scan result to copy.");
+      const csvContent = csvHeader + csvRows;
+      downloadFile(csvContent, 'threatpeek_scan_results.csv', 'text/csv');
+    });
 
-  let output = "";
-  rows.forEach(row => {
-    const cells = row.querySelectorAll("td");
-    const line = Array.from(cells).map(cell => cell.innerText.trim()).join(" | ");
-    output += line + "\n";
-  });
+    document.getElementById('exportJsonBtn').addEventListener('click', function() {
+      if (currentScanResults.length === 0) {
+        alert('No scan results to export. Please run a scan first.');
+        return;
+      }
 
-  navigator.clipboard.writeText(output)
-    .then(() => alert("Scan results copied to clipboard!"))
-    .catch(err => alert("Copy failed: " + err));
-});
+      const exportData = {
+        scan_timestamp: new Date().toISOString(),
+        total_urls: currentScanResults.length,
+        results: currentScanResults.map(result => ({
+          url: result.url,
+          status: result.status,
+          details: result.details,
+          vendors: result.vendors || null
+        }))
+      };
 
-document.getElementById("exportCsvBtn").addEventListener("click", () => {
-  if (!window.latestScanResults || !window.latestScanResults.length) {
-    return alert("No scan results to export.");
-  }
+      const jsonContent = JSON.stringify(exportData, null, 2);
+      downloadFile(jsonContent, 'threatpeek_scan_results.json', 'application/json');
+    });
 
-  const rows = [
-    ["URL", "Status", "Details"]
-  ];
-
-  window.latestScanResults.forEach(result => {
-    let details = result.details || "";
-    if (result.vendors) {
-      const vendorLines = Object.entries(result.vendors)
-        .map(([vendor, verdict]) => `${vendor}: ${verdict}`)
-        .join("; ");
-      details += ` | Vendors: ${vendorLines}`;
+    function downloadFile(content, filename, mimeType) {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
     }
-    rows.push([result.url, result.status, details]);
-  });
 
-  const csvContent = rows.map(r => r.map(field => `"${field.replace(/"/g, '""')}"`).join(",")).join("\n");
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = "threatpeek_results.csv";
-  link.click();
-});
+    // Update scan summary statistics
+    function updateScanSummary(results) {
+      const stats = {
+        total: results.length,
+        clean: 0,
+        suspicious: 0,
+        malicious: 0,
+        invalid: 0
+      };
 
-document.getElementById("exportJsonBtn").addEventListener("click", () => {
-  if (!window.latestScanResults || !window.latestScanResults.length) {
-    return alert("No scan results to export.");
-  }
+      results.forEach(result => {
+        const status = result.status.toLowerCase();
+        if (stats.hasOwnProperty(status)) {
+          stats[status]++;
+        }
+      });
 
-  const blob = new Blob([JSON.stringify(window.latestScanResults, null, 2)], { type: "application/json" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = "threatpeek_results.json";
-  link.click();
-});
+      // Update the display
+      document.getElementById('totalUrls').textContent = stats.total;
+      document.getElementById('cleanCount').textContent = stats.clean;
+      document.getElementById('suspiciousCount').textContent = stats.suspicious;
+      document.getElementById('maliciousCount').textContent = stats.malicious;
+      document.getElementById('invalidCount').textContent = stats.invalid;
 
-document.getElementById("urlInput").addEventListener("keydown", function (event) {
-  if (event.key === "Enter" && !event.shiftKey) {
-    event.preventDefault();
-    scanUrl();
-  }
-});
-</script>
+      // Show the summary
+      document.getElementById('scanSummary').style.display = 'block';
+      
+      return stats;
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function(event) {
+      // Ctrl/Cmd + Enter to scan
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        event.preventDefault();
+        if (!document.getElementById('scanButton').disabled) {
+          scanUrl();
+        }
+      }
+      
+      // Ctrl/Cmd + C to copy (when results available)
+      if ((event.ctrlKey || event.metaKey) && event.key === 'c' && event.shiftKey) {
+        event.preventDefault();
+        if (currentScanResults.length > 0) {
+          document.getElementById('copyBtn').click();
+        }
+      }
+      
+      // Escape to clear results
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        clearResults();
+      }
+    });
+
+    // Clear results function
+    function clearResults() {
+      document.querySelector('#resultTable tbody').innerHTML = '';
+      document.getElementById('scanSummary').style.display = 'none';
+      document.getElementById('chartsSection').style.display = 'none';
+      document.getElementById('searchFilters').style.display = 'none';
+      document.getElementById('resultTableWrapper').style.display = 'none';
+      document.getElementById('exportControls').style.display = 'none';
+      currentScanResults = [];
+      document.getElementById('urlInput').value = '';
+      document.getElementById('urlFileInput').value = '';
+      
+      // Destroy chart if it exists
+      if (window.currentChart) {
+        window.currentChart.destroy();
+        window.currentChart = null;
+      }
+    }
+
+// Implement chart display after scan
+    function displayChart(stats) {
+      const ctx = document.getElementById('scanChart').getContext('2d');
+      const isDarkMode = document.body.classList.contains('dark-mode');
+      
+      // Destroy existing chart if it exists
+      if (window.currentChart) {
+        window.currentChart.destroy();
+      }
+      
+      window.currentChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Clean', 'Suspicious', 'Malicious', 'Invalid'],
+          datasets: [{
+            data: [stats.clean, stats.suspicious, stats.malicious, stats.invalid],
+            backgroundColor: [
+              '#00C851',  // Clean - Strong green
+              '#FF8800',  // Suspicious - Strong orange
+              '#FF3547',  // Malicious - Strong red
+              '#6C757D'   // Invalid - Gray
+            ],
+            borderColor: [
+              '#00A041',
+              '#E67700',
+              '#E62937',
+              '#5A656D'
+            ],
+            borderWidth: 3,
+            hoverOffset: 8
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '50%',
+          plugins: {
+            legend: {
+              display: true,
+              position: 'bottom',
+              labels: {
+                color: isDarkMode ? '#e6edf3' : '#333',
+                font: {
+                  size: 12,
+                  weight: 'bold'
+                },
+                padding: 15,
+                usePointStyle: true,
+                pointStyle: 'circle'
+              }
+            },
+            tooltip: {
+              enabled: true,
+              backgroundColor: isDarkMode ? '#21262d' : '#fff',
+              borderColor: isDarkMode ? '#30363d' : '#ddd',
+              borderWidth: 1,
+              titleColor: isDarkMode ? '#e6edf3' : '#000',
+              bodyColor: isDarkMode ? '#e6edf3' : '#000',
+              titleFont: {
+                size: 13,
+                weight: 'bold'
+              },
+              bodyFont: {
+                size: 12
+              }
+            }
+          },
+          animation: {
+            animateRotate: true,
+            duration: 1000
+          },
+          elements: {
+            arc: {
+              borderJoinStyle: 'round'
+            }
+          }
+        }
+      });
+      document.getElementById('chartsSection').style.display = 'block';
+    }
+
+    // Implement drag and drop file upload
+    const dragOverlay = document.getElementById('dragOverlay');
+    document.addEventListener('dragover', e => e.preventDefault());
+    document.addEventListener('dragenter', () => dragOverlay.classList.add('visible'));
+    document.addEventListener('dragleave', () => dragOverlay.classList.remove('visible'));
+    document.addEventListener('drop', e => {
+      e.preventDefault();
+      dragOverlay.classList.remove('visible');
+      const files = e.dataTransfer.files;
+      if (files.length) {
+        const fileInput = document.getElementById('urlFileInput');
+        fileInput.files = files;
+        showToast('File uploaded successfully!', 'success');
+      }
+    });
+
+    // Implement search and filter logic
+    document.getElementById('searchInput').addEventListener('input', function() {
+      const filter = this.value.toLowerCase();
+      const rows = document.querySelectorAll('#resultTable tbody tr');
+      rows.forEach(row => {
+        row.style.display = row.innerText.toLowerCase().includes(filter) ? '' : 'none';
+      });
+    });
+
+    document.querySelectorAll('.filter-btn').forEach(button => {
+      button.addEventListener('click', function() {
+        document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+        this.classList.add('active');
+        const filter = this.getAttribute('data-filter');
+        const rows = document.querySelectorAll('#resultTable tbody tr');
+        rows.forEach(row => {
+          const status = row.querySelector('.status').innerText.toLowerCase();
+          row.style.display = (filter === 'all' || status === filter) ? '' : 'none';
+        });
+      });
+    });
+
+    // Implement toast notifications
+    function showToast(message, type) {
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = message;
+      document.getElementById('toastContainer').appendChild(toast);
+      setTimeout(() => {
+        toast.classList.add('hide');
+        toast.addEventListener('transitionend', () => toast.remove());
+      }, 3000);
+    }
+
+    // Add tooltips on hover
+    function initializeTooltips() {
+      const tooltipElements = [
+        { id: 'scanButton', text: 'Scan URLs for security threats (Ctrl+Enter)' },
+        { id: 'copyBtn', text: 'Copy results to clipboard (Ctrl+Shift+C)' },
+        { id: 'exportCsvBtn', text: 'Download results as CSV file' },
+        { id: 'exportJsonBtn', text: 'Download results as JSON file' },
+        { id: 'darkToggle', text: 'Toggle dark/light theme' }
+      ];
+
+      tooltipElements.forEach(item => {
+        const element = document.getElementById(item.id);
+        if (element && !element.hasAttribute('title')) {
+          element.title = item.text;
+        }
+      });
+    }
+
+    // Initialize tooltips when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+      initializeTooltips();
+      initializeDarkMode();
+    });
+
+    // Progress bar functions
+    function updateProgress(current, total) {
+      const percentage = Math.round((current / total) * 100);
+      const progressBar = document.getElementById('progressBar');
+      const progressText = document.getElementById('progressText');
+      
+      progressBar.style.width = percentage + '%';
+      progressText.textContent = percentage + '%';
+    }
+
+    function simulateProgress(totalUrls) {
+      let progress = 0;
+      const interval = setInterval(() => {
+        progress += Math.random() * 15; // Random increment
+        if (progress >= 95) {
+          progress = 95; // Stay at 95% until real completion
+          clearInterval(interval);
+        }
+        updateProgress(progress, 100);
+      }, 200);
+      
+      // Store interval ID to clear it when scan completes
+      window.progressInterval = interval;
+    }
+  </script>
 </body>
 </html>

@@ -12,6 +12,11 @@ from models.scan_models import URLScanRequest, URLScanResponse
 from logger import logger, log_request
 from utils.ssl_check import async_ssl_check
 from utils.analysis_helpers import is_high_entropy
+from fastapi.responses import Response
+import csv
+import io
+import json
+from datetime import datetime
 
 router = APIRouter()
 load_dotenv()
@@ -126,10 +131,68 @@ async def scan_urls(request: URLScanRequest):
         # Always trust VirusTotal verdicts
         log_request(url, vt_status, vt_detail)
         results.append(URLScanResponse(url=url, status=vt_status, details=vt_detail, vendors=vendors))
-        continue
-
-        local_status, local_detail = await enhanced_threat_analysis(url)
-        log_request(url, local_status, local_detail)
-        results.append(URLScanResponse(url=url, status=local_status, details=local_detail))
 
     return results
+
+
+@router.post("/export/csv")
+async def export_scan_results_csv(request: URLScanRequest):
+    """Export scan results as CSV file"""
+    results = await scan_urls(request)  # Reuse the scan logic
+    
+    # Create CSV content
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write header
+    writer.writerow(['URL', 'Status', 'Details', 'Timestamp'])
+    
+    # Write data rows
+    timestamp = datetime.utcnow().isoformat()
+    for result in results:
+        writer.writerow([
+            result.url,
+            result.status,
+            result.details,
+            timestamp
+        ])
+    
+    csv_content = output.getvalue()
+    output.close()
+    
+    # Return as downloadable file
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=threatpeek_scan_results.csv"}
+    )
+
+
+@router.post("/export/json")
+async def export_scan_results_json(request: URLScanRequest):
+    """Export scan results as JSON file"""
+    results = await scan_urls(request)  # Reuse the scan logic
+    
+    # Create JSON structure
+    export_data = {
+        "scan_timestamp": datetime.utcnow().isoformat(),
+        "total_urls": len(results),
+        "results": [
+            {
+                "url": result.url,
+                "status": result.status,
+                "details": result.details,
+                "vendors": result.vendors
+            }
+            for result in results
+        ]
+    }
+    
+    json_content = json.dumps(export_data, indent=2)
+    
+    # Return as downloadable file
+    return Response(
+        content=json_content,
+        media_type="application/json",
+        headers={"Content-Disposition": "attachment; filename=threatpeek_scan_results.json"}
+    )
