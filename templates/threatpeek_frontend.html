@@ -6,41 +6,77 @@
   <meta name="description" content="ThreatPeek PH - A powerful URL security scanner to detect phishing, malware, and SSL issues" />
   <meta name="author" content="ThreatPeek PH" />
   <title>ThreatPeek PH - URL Security Scanner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/style.css" />
-  <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230d6efd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 2l7 3v6c0 5-3.5 9-7 11-3.5-2-7-6-7-11V5l7-3z'/></svg>" />
 </head>
 <body>
   <div id="container">
     <div id="header">
       <div class="header-content">
-        <h1 class="app-title">🛡️ ThreatPeek PH</h1>
+        <h1 class="app-title">ThreatPeek PH</h1>
         <p class="app-subtitle">Advanced URL Security Scanner</p>
       </div>
       <div class="header-controls">
-        <button id="darkModeToggle" class="dark-mode-btn" onclick="toggleDarkMode()">
-          <span class="dark-mode-icon">🌙</span>
-          <span class="dark-mode-text">Dark Mode</span>
-        </button>
+        <div class="quick-actions" role="toolbar" aria-label="Quick actions">
+          <button class="qa-btn" id="clearBtn" title="Clear all inputs" aria-label="Clear all inputs" onclick="clearInputs()">
+            <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 6h18v2H3V6zm2 4h14l-1.5 10.5a2 2 0 01-2 1.5H8.5a2 2 0 01-2-1.5L5 10zM9 4h6l1 2H8l1-2z"/></svg></span>
+            <span class="qa-text">Clear</span>
+          </button>
+          <button class="qa-btn" id="sampleBtn" title="Paste sample URLs" aria-label="Paste sample URLs" onclick="loadSample()">
+            <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M19 21H5a2 2 0 01-2-2V7h2v12h14v2zM14 3h5a2 2 0 012 2v9h-2V5h-5V3zM3 3h9v6H3V3zm2 2v2h5V5H5z"/></svg></span>
+            <span class="qa-text">Sample</span>
+          </button>
+          <label class="qa-toggle" title="Autoscan on input" aria-label="Autoscan on input">
+            <input type="checkbox" id="autoscanToggle" />
+            <span class="qa-toggle-slider">Auto</span>
+          </label>
+          <span class="vt-badge" id="vtStatus" title="VirusTotal API status">VT: …</span>
+          <button class="qa-btn ghost" id="settingsBtn" title="Settings" aria-haspopup="true" aria-expanded="false" onclick="toggleSettings()">
+            <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M19.14 12.94a7.49 7.49 0 000-1.88l2.03-1.58a.5.5 0 00.12-.64l-1.92-3.32a.5.5 0 00-.6-.22l-2.39.96a7.51 7.51 0 00-1.63-.95l-.36-2.54a.5.5 0 00-.5-.43h-3.84a.5.5 0 00-.5.43l-.36 2.54c-.58.23-1.13.54-1.63.95l-2.39-.96a.5.5 0 00-.6.22L2.71 8.84a.5.5 0 00.12.64l2.03 1.58a7.49 7.49 0 000 1.88l-2.03 1.58a.5.5 0 00-.12.64l1.92 3.32a.5.5 0 00.6.22l2.39-.96c.5.41 1.05.72 1.63.95l.36 2.54a.5.5 0 00.5.43h3.84a.5.5 0 00.5-.43l.36-2.54c.58-.23 1.13-.54 1.63-.95l2.39.96a.5.5 0 00.6-.22l1.92-3.32a.5.5 0 00-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1115.5 12 3.5 3.5 0 0112 15.5z"/></svg></span>
+          </button>
+          <div id="settingsPopover" class="settings-popover" role="dialog" aria-modal="false" aria-labelledby="settingsTitle" hidden>
+            <div class="settings-header"><span id="settingsTitle">Settings</span></div>
+            <div class="settings-item"><label>Timeout (s)<input id="timeoutDisplay" type="number" min="1" step="1" value="10" /></label></div>
+            <div class="settings-item"><label>Entropy threshold<input id="entropyDisplay" type="number" min="1" step="0.1" value="4.5" /></label></div>
+            <div class="settings-footer"><button class="qa-btn small" onclick="applySettings()">Apply</button></div>
+          </div>
+
+        </div>
+        
+         
+        <label class="theme-toggle" title="Toggle dark mode" aria-label="Toggle dark mode">
+          <input id="darkModeToggle" type="checkbox" onchange="toggleDarkMode(this)" aria-label="Dark mode toggle" />
+          <span class="toggle-slider" aria-hidden="true">
+            <span class="toggle-icon sun">
+              <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.8 1.42-1.42zm10.48 0l1.79-1.79 1.41 1.41-1.79 1.8-1.41-1.42zM12 4V1h-0v3h0zm0 19v-3h0v3h0zM4 12H1v0h3v0zm19 0h-3v0h3v0zM6.76 19.16l-1.42 1.42-1.79-1.8 1.41-1.41 1.8 1.79zm12.69-.38l1.79 1.8-1.41 1.41-1.8-1.79 1.42-1.42zM12 8a4 4 0 100 8 4 4 0 000-8z"/></svg>
+            </span>
+            <span class="toggle-icon moon">
+              <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+            </span>
+          </span>
+        </label>
       </div>
     </div>
 
     <div id="scanControls">
       <div class="input-section">
-        <label for="urlInput">🔗 Enter URLs to scan:</label>
+        <label for="urlInput"><span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M10.59 13.41a1 1 0 010-1.41l3.18-3.18a3 3 0 114.24 4.24l-1.41 1.41-1.41-1.41 1.41-1.41a1 1 0 10-1.41-1.41l-3.18 3.18a1 1 0 01-1.41 0z"/><path fill="currentColor" d="M13.41 10.59a1 1 0 010 1.41l-3.18 3.18a3 3 0 11-4.24-4.24l1.41-1.41 1.41 1.41-1.41 1.41a1 1 0 001.41 1.41l3.18-3.18a1 1 0 011.41 0z"/></svg></span> Enter URLs to scan:</label>
         <textarea 
           id="urlInput" 
-          placeholder="Examples:&#10;https://example.com&#10;suspicious-site.com&#10;http://malware-check.org" 
+          placeholder="Enter URLs (one per line)"
           rows="6"
           maxlength="10000">
-        </textarea>
-        <div class="input-help">
-          <small>💡 Separate multiple URLs with new lines or commas. Maximum 10 URLs per scan.</small>
+        </textarea
+>
+          <small>💡 Separate multiple URLs with new lines or commas. Maximum 500 URLs per scan.</small>
         </div>
       </div>
       
       <div class="file-section">
-        <label for="urlFileInput">📁 Or upload a file:</label>
+        <label for="urlFileInput"><span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M20 6h-8l-2-2H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V8a2 2 0 00-2-2zm-8 9v-3H9l3-3 3 3h-3v3z"/></svg></span> Or upload a file:</label>
         <div class="file-input-wrapper">
           <input type="file" id="urlFileInput" accept=".txt,.csv" />
           <span class="file-help">Supported: .txt, .csv files</span>
@@ -48,14 +84,14 @@
       </div>
       
       <div class="scan-button-wrapper">
-        <button id="scanButton" onclick="scanUrl()" class="scan-btn">🛡️ Start Security Scan</button>
-      </div>
+        <button id="scanButton" onclick="scanUrl()" class="scan-btn"><span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2l7 3v6c0 5-3.5 9-7 11-3.5-2-7-6-7-11V5l7-3z"/></svg></span> <span>Scan URLs</span></button>
     </div>
 
     <div id="loader">
       <div class="progress-container">
         <div class="progress-bar" id="progressBar"></div>
         <span class="progress-text" id="progressText">0%</span>
+        <span class="progress-meta" id="progressMeta" style="margin-left:8px; font-size:12px; color:#888;">0/0 • ETA —</span>
       </div>
     </div>
 
@@ -84,21 +120,12 @@
       </div>
     </div>
 
-    <!-- Charts Section -->
-    <div id="chartsSection" style="display: none;">
-      <div class="charts-container">
-        <div class="chart-wrapper">
-          <h3>📊 Scan Results Distribution</h3>
-          <canvas id="scanChart"></canvas>
-        </div>
-      </div>
-    </div>
 
     <!-- Search and Filter Section -->
     <div id="searchFilters" style="display: none;">
       <div class="filters-container">
         <div class="search-box">
-          <input type="text" id="searchInput" placeholder="🔍 Search URLs or details..." />
+          <input type="text" id="searchInput" placeholder="Search URLs or details..." />
         </div>
         <div class="filter-buttons">
           <button class="filter-btn active" data-filter="all">All</button>
@@ -124,16 +151,16 @@
     </div>
 
     <div id="exportControls" style="display: none;">
-      <button id="copyBtn">📋 Copy</button>
-      <button id="exportCsvBtn">📄 Export CSV</button>
-      <button id="exportJsonBtn">🧾 Export JSON</button>
+      <button id="copyBtn"><span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M16 1H4a2 2 0 00-2 2v12h2V3h12V1zm3 4H8a2 2 0 00-2 2v14a2 2 0 002 2h11a2 2 0 002-2V7a2 2 0 00-2-2zm0 16H8V7h11v14z"/></svg></span> <span>Copy</span></button>
+      <button id="exportCsvBtn"><span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M19 2H8a2 2 0 00-2 2v3H5a3 3 0 00-3 3v7a3 3 0 003 3h11a3 3 0 003-3V4a2 2 0 00-2-2zm-6 14h-2l-1-2-1 2H7l1.5-3L7 10h2l1 2 1-2h2l-1.5 3L13 16zm4-8H8V4h9v4z"/></svg></span> <span>Export CSV</span></button>
+      <button id="exportJsonBtn"><span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M7 7h2v2H7v6h2v2H5V7h2zm12 0v10h-4v-2h2V9h-2V7h4zM11 7h2v2h-2V7zm0 4h2v2h-2v-2zm0 4h2v2h-2v-2z"/></svg></span> <span>Export JSON</span></button>
     </div>
   </div>
 
   <!-- Drag and Drop Overlay -->
   <div id="dragOverlay" class="drag-overlay">
     <div class="drag-message">
-      <div class="drag-icon">📁</div>
+      <div class="drag-icon"><span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="#888" d="M20 6h-8l-2-2H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V8a2 2 0 00-2-2z"/></svg></span></div>
       <div class="drag-text">Drop your file here</div>
       <div class="drag-subtext">Supported: .txt, .csv files</div>
     </div>
@@ -143,58 +170,171 @@
   <div id="toastContainer" class="toast-container"></div>
 
   <script>
-    function toggleDarkMode() {
+    // Simple in-session cache for URL scan results
+    const vtCache = new Map(); // key: url (string), value: result object
+    let progressStartTime = null;
+    let progressCompleted = 0;
+    let progressTotal = 0;
+
+    function toggleDarkMode(el) {
+      const checkbox = el || document.getElementById('darkModeToggle');
+      const enable = !!checkbox.checked;
       const body = document.body;
-      const isDarkMode = body.classList.toggle("dark-mode");
-      const toggle = document.getElementById('darkModeToggle');
-      const icon = toggle.querySelector('.dark-mode-icon');
-      const text = toggle.querySelector('.dark-mode-text');
-      
-      if (isDarkMode) {
+
+      if (enable) {
+        body.classList.add('dark-mode');
         localStorage.setItem('darkMode', 'enabled');
-        icon.textContent = '☀️';
-        text.textContent = 'Light Mode';
-        toggle.classList.add('active');
       } else {
+        body.classList.remove('dark-mode');
         localStorage.setItem('darkMode', 'disabled');
-        icon.textContent = '🌙';
-        text.textContent = 'Dark Mode';
-        toggle.classList.remove('active');
       }
-      
-      // Update chart if it exists
-      if (window.currentChart) {
-        updateChartTheme();
-      }
+
     }
     
+    // Settings / Quick actions logic
+    function toggleSettings() {
+      const pop = document.getElementById('settingsPopover');
+      const btn = document.getElementById('settingsBtn');
+      const isHidden = pop.hasAttribute('hidden');
+      if (isHidden) {
+        pop.removeAttribute('hidden');
+        btn.setAttribute('aria-expanded', 'true');
+      } else {
+        pop.setAttribute('hidden', '');
+        btn.setAttribute('aria-expanded', 'false');
+      }
+    }
+    function applySettings() {
+      // Placeholder for future backend wiring; currently just closes popover
+      toggleSettings();
+    }
+    function clearInputs() {
+      clearResults();
+    }
+    function loadSample() {
+      const ta = document.getElementById('urlInput');
+      const sample = ['example.com','malware.test','http://phishy.io/login'].join('\n');
+      ta.value = sample;
+      // Apply dedupe/sanitize immediately if toggles are on
+      try { refreshTextareaFromToggles(); } catch {}
+      // trigger normalization and autoscan if enabled
+      const autoscan = document.getElementById('autoscanToggle');
+      if (autoscan && autoscan.checked) { scanUrl(); }
+    }
+
+    async function fetchVTStatus() {
+      try {
+        const res = await fetch('/api/status/config');
+        if (!res.ok) throw new Error('status ' + res.status);
+        const data = await res.json();
+        const el = document.getElementById('vtStatus');
+        if (data.vt_present) {
+          el.textContent = 'VT: OK';
+          el.style.borderColor = '#198754';
+          el.style.color = '#198754';
+        } else {
+          el.textContent = 'VT: Missing';
+          el.style.borderColor = '#dc3545';
+          el.style.color = '#dc3545';
+        }
+      } catch (e) {
+        const el = document.getElementById('vtStatus');
+        el.textContent = 'VT: Unknown';
+      }
+    }
+
+    function wireAutoscan() {
+      // Density toggle
+      const densityBtn = document.getElementById('densityBtn');
+      if (densityBtn) {
+        densityBtn.addEventListener('click', function(){
+          document.body.classList.toggle('compact-table');
+          densityBtn.classList.toggle('active');
+        });
+      }
+
+      // Autoscan enter key
+      
+      const autoscan = document.getElementById('autoscanToggle');
+      const ta = document.getElementById('urlInput');
+      if (!autoscan || !ta) return;
+      ta.addEventListener('keydown', function(e) {
+        if (autoscan.checked && e.key === 'Enter' && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)) {
+          e.preventDefault();
+          scanUrl();
+        }
+      });
+    }
+
     // Initialize dark mode from localStorage
     function initializeDarkMode() {
       const darkMode = localStorage.getItem('darkMode');
-      const toggle = document.getElementById('darkModeToggle');
-      const icon = toggle.querySelector('.dark-mode-icon');
-      const text = toggle.querySelector('.dark-mode-text');
-      
+      const checkbox = document.getElementById('darkModeToggle');
       if (darkMode === 'enabled') {
         document.body.classList.add('dark-mode');
-        icon.textContent = '☀️';
-        text.textContent = 'Light Mode';
-        toggle.classList.add('active');
+        checkbox.checked = true;
+      } else {
+        document.body.classList.remove('dark-mode');
+        checkbox.checked = false;
       }
+    }
+
+    // Normalize textarea input: strip leading spaces/tabs per line and remove internal spaces/tabs
+    function initializeUrlInputNormalization() {
+      const ta = document.getElementById('urlInput');
+      if (!ta) return;
+      const normalize = () => {
+        // Remove leading tabs/spaces per line, then remove any remaining spaces/tabs anywhere (preserve newlines)
+        ta.value = ta.value
+          .replace(/^[\t ]+/gm, '')
+          .replace(/[ \t]+/g, '');
+      };
+      ta.addEventListener('input', normalize);
+      ta.addEventListener('blur', normalize);
+      ta.addEventListener('paste', () => setTimeout(normalize, 0));
     }
     
-    // Update chart theme when dark mode changes
-    function updateChartTheme() {
-      if (window.currentChart) {
-        const isDarkMode = document.body.classList.contains('dark-mode');
-        window.currentChart.options.plugins.legend.labels.color = isDarkMode ? '#e6edf3' : '#333';
-        window.currentChart.options.plugins.tooltip.backgroundColor = isDarkMode ? '#21262d' : '#fff';
-        window.currentChart.options.plugins.tooltip.borderColor = isDarkMode ? '#30363d' : '#ddd';
-        window.currentChart.options.plugins.tooltip.titleColor = isDarkMode ? '#e6edf3' : '#000';
-        window.currentChart.options.plugins.tooltip.bodyColor = isDarkMode ? '#e6edf3' : '#000';
-        window.currentChart.update('none');
+    function currentUrlsFromTextarea() {
+      const textareaValue = document.getElementById("urlInput").value.trim();
+      if (!textareaValue) return [];
+      let urls = textareaValue.split(/[\n,]+/).map(u => u.trim()).filter(Boolean);
+      // Deduplicate + sanitize if enabled
+      const dedupe = document.getElementById('dedupeToggle');
+      const sanitize = document.getElementById('sanitizeToggle');
+      if ((dedupe && dedupe.checked) || (sanitize && sanitize.checked)) {
+        const seen = new Set();
+        urls = urls.map(u => {
+          if (sanitize && sanitize.checked) {
+            try {
+              // Only for http(s); others pass through
+              const parsed = new URL(u.startsWith('http') ? u : 'https://' + u);
+              // Remove utm_* params
+              [...parsed.searchParams.keys()].forEach(k => { if (k.toLowerCase().startsWith('utm_')) parsed.searchParams.delete(k); });
+              parsed.hash = '';
+              return parsed.toString();
+            } catch {
+              return u;
+            }
+          }
+          return u;
+        }).filter(u => {
+          if (!dedupe || !dedupe.checked) return true;
+          const key = u.toLowerCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
       }
+      return urls;
     }
+
+    // Rebuild textarea content based on current toggle settings and lists
+    function refreshTextareaFromToggles() {
+      const urls = currentUrlsFromTextarea();
+      const ta = document.getElementById('urlInput');
+      ta.value = urls.join('\n');
+    }
+
 
     async function scanUrl() {
       const textareaValue = document.getElementById("urlInput").value.trim();
@@ -202,14 +342,13 @@
       const loader = document.getElementById("loader");
       const tbody = document.querySelector("#resultTable tbody");
 
-      let urls = [];
+      let urls = currentUrlsFromTextarea();
 
-      // From textarea
-      if (textareaValue) {
-        urls = urls.concat(
-          textareaValue.split(/[\n,]+/).map(url => url.trim()).filter(Boolean)
-        );
-      }
+      // Progress init
+      progressStartTime = Date.now();
+      progressCompleted = 0;
+      progressTotal = urls.length;
+      updateProgress(0, progressTotal);
 
       // From uploaded file
       if (fileInput.files.length > 0) {
@@ -221,6 +360,16 @@
       }
 
       console.log("URLs to scan:", urls);
+      // Save history (last 5)
+      try {
+        const hist = JSON.parse(localStorage.getItem('scanHistory') || '[]');
+        const joined = urls.join('\n');
+        if (joined) {
+          const newHist = [joined, ...hist.filter(h => h !== joined)].slice(0,5);
+          localStorage.setItem('scanHistory', JSON.stringify(newHist));
+          refreshHistoryDropdown();
+        }
+      } catch {}
 
       if (urls.length === 0) {
         alert("Please enter or upload at least one URL.");
@@ -230,75 +379,71 @@
       // Disable scan button and show progress
       const scanBtn = document.getElementById('scanButton');
       scanBtn.disabled = true;
-      scanBtn.textContent = '⏳ Scanning...';
+          scanBtn.textContent = 'Scanning...';
       
       loader.style.display = "block";
       tbody.innerHTML = "";
       
-      // Reset and start progress bar
-      updateProgress(0, urls.length);
-      
-      // Simulate progress updates
-      simulateProgress(urls.length);
+      // Partition by cache if enabled
+      const useCache = document.getElementById('useCacheToggle') && document.getElementById('useCacheToggle').checked;
+      let cachedHits = [];
+      let toQuery = urls.slice();
+      if (useCache) {
+        cachedHits = urls.filter(u => vtCache.has(u));
+        toQuery = urls.filter(u => !vtCache.has(u));
+      }
+
+      // Render cached hits immediately
+      if (cachedHits.length) {
+        cachedHits.forEach(u => {
+          const result = vtCache.get(u);
+          appendResultRow(result);
+        });
+        progressCompleted += cachedHits.length;
+        updateProgress(progressCompleted, progressTotal);
+      }
 
       try {
-        const response = await fetch("/api/scan_urls", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ urls })
-        });
-
-        const data = await response.json();
-        
-        // Complete progress bar
-        if (window.progressInterval) {
-          clearInterval(window.progressInterval);
+        let data = [];
+        if (toQuery.length) {
+          const response = await fetch("/api/scan_urls", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ urls: toQuery, use_cache: !!useCache })
+          });
+          data = await response.json();
         }
-        updateProgress(100, 100);
-        
-        // Small delay to show 100% before hiding loader
+
+        // Hide loader slightly after completion
         setTimeout(() => {
           loader.style.display = "none";
-        }, 500);
+        }, 300);
 
-        currentScanResults = data;
+        // Combine results: cached + newly fetched
+        const combined = [...(cachedHits.map(u => vtCache.get(u)) || []), ...data];
+        currentScanResults = combined;
 
+        // Render new results and update cache
         data.forEach(result => {
-          const colorClass = {
-            clean: "green",
-            suspicious: "orange",
-            malicious: "red",
-            invalid: "gray",
-            error: "gray"
-          }[result.status.toLowerCase()] || "";
-
-          let vendorsHtml = "";
-          if ((result.status === "malicious" || result.status === "suspicious") &&
-              result.vendors && Object.keys(result.vendors).length > 0) {
-            vendorsHtml += `
-              <details>
-                <summary>🧪 Show Vendor Details</summary>
-                <ul style="margin: 0;">
-                  ${Object.entries(result.vendors).map(([v, d]) => `<li>${v}: ${d}</li>`).join("")}
-                </ul>
-              </details>
-            `;
-          }
-
-          const row = document.createElement("tr");
-          row.innerHTML = `
-            <td>${result.url}</td>
-            <td class="status ${colorClass}">${result.status}</td>
-            <td>${result.details}${vendorsHtml}</td>
-          `;
-          tbody.appendChild(row);
+          vtCache.set(result.url, result);
+          appendResultRow(result);
+          progressCompleted += 1;
+          updateProgress(progressCompleted, progressTotal);
         });
         
         // Update scan summary statistics
-        const stats = updateScanSummary(data);
+        const stats = updateScanSummary(combined);
+
+        // Update VT badge with cache stats
+        try {
+          const el = document.getElementById('vtStatus');
+          const base = el.textContent.split('•')[0].trim();
+          const hits = cachedHits.length;
+          const news = toQuery.length;
+          el.textContent = `${base} • cache ${hits}/${hits+news}`;
+        } catch {}
         
-        // Display chart and enable search/filters
-        displayChart(stats);
+        // Enable search/filters
         document.getElementById('searchFilters').style.display = 'block';
         
         // Show success toast
@@ -310,7 +455,7 @@
         
         // Re-enable scan button
         scanBtn.disabled = false;
-        scanBtn.textContent = '🛡️ Start Security Scan';
+        scanBtn.innerHTML = '<span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2l7 3v6c0 5-3.5 9-7 11-3.5-2-7-6-7-11V5l7-3z"/></svg></span> <span>Scan URLs</span>';
 
       } catch (error) {
         loader.style.display = "none";
@@ -337,7 +482,7 @@
       navigator.clipboard.writeText(textData).then(() => {
         const btn = document.getElementById('copyBtn');
         const originalText = btn.textContent;
-        btn.textContent = '✅ Copied!';
+        btn.textContent = 'Copied!';
         btn.style.backgroundColor = '#28a745';
         btn.style.color = 'white';
 
@@ -399,6 +544,38 @@
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+    }
+
+    // Helper to render a single result row
+    function appendResultRow(result) {
+      const tbody = document.querySelector("#resultTable tbody");
+      const colorClass = {
+        clean: "green",
+        suspicious: "orange",
+        malicious: "red",
+        invalid: "gray",
+        error: "gray"
+      }[String(result.status || '').toLowerCase()] || "";
+
+      let vendorsHtml = "";
+      if ((result.status === "malicious" || result.status === "suspicious") &&
+          result.vendors && Object.keys(result.vendors).length > 0) {
+        vendorsHtml += `
+          <details>
+            <summary>Show Vendor Details</summary>
+            <ul style="margin: 0;">
+              ${Object.entries(result.vendors).map(([v, d]) => `<li>${v}: ${d}</li>`).join("")}
+            </ul>
+          </details>
+        `;
+      }
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${result.url}</td>
+        <td class="status ${colorClass}">${result.status}</td>
+        <td>${result.details || ''}${vendorsHtml}</td>
+      `;
+      tbody.appendChild(row);
     }
 
     // Update scan summary statistics
@@ -468,93 +645,8 @@
       document.getElementById('urlInput').value = '';
       document.getElementById('urlFileInput').value = '';
       
-      // Destroy chart if it exists
-      if (window.currentChart) {
-        window.currentChart.destroy();
-        window.currentChart = null;
-      }
     }
 
-// Implement chart display after scan
-    function displayChart(stats) {
-      const ctx = document.getElementById('scanChart').getContext('2d');
-      const isDarkMode = document.body.classList.contains('dark-mode');
-      
-      // Destroy existing chart if it exists
-      if (window.currentChart) {
-        window.currentChart.destroy();
-      }
-      
-      window.currentChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-          labels: ['Clean', 'Suspicious', 'Malicious', 'Invalid'],
-          datasets: [{
-            data: [stats.clean, stats.suspicious, stats.malicious, stats.invalid],
-            backgroundColor: [
-              '#00C851',  // Clean - Strong green
-              '#FF8800',  // Suspicious - Strong orange
-              '#FF3547',  // Malicious - Strong red
-              '#6C757D'   // Invalid - Gray
-            ],
-            borderColor: [
-              '#00A041',
-              '#E67700',
-              '#E62937',
-              '#5A656D'
-            ],
-            borderWidth: 3,
-            hoverOffset: 8
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          cutout: '50%',
-          plugins: {
-            legend: {
-              display: true,
-              position: 'bottom',
-              labels: {
-                color: isDarkMode ? '#e6edf3' : '#333',
-                font: {
-                  size: 12,
-                  weight: 'bold'
-                },
-                padding: 15,
-                usePointStyle: true,
-                pointStyle: 'circle'
-              }
-            },
-            tooltip: {
-              enabled: true,
-              backgroundColor: isDarkMode ? '#21262d' : '#fff',
-              borderColor: isDarkMode ? '#30363d' : '#ddd',
-              borderWidth: 1,
-              titleColor: isDarkMode ? '#e6edf3' : '#000',
-              bodyColor: isDarkMode ? '#e6edf3' : '#000',
-              titleFont: {
-                size: 13,
-                weight: 'bold'
-              },
-              bodyFont: {
-                size: 12
-              }
-            }
-          },
-          animation: {
-            animateRotate: true,
-            duration: 1000
-          },
-          elements: {
-            arc: {
-              borderJoinStyle: 'round'
-            }
-          }
-        }
-      });
-      document.getElementById('chartsSection').style.display = 'block';
-    }
 
     // Implement drag and drop file upload
     const dragOverlay = document.getElementById('dragOverlay');
@@ -607,13 +699,44 @@
     }
 
     // Add tooltips on hover
+    function refreshHistoryDropdown() {
+      const sel = document.getElementById('historySelect');
+      if (!sel) return;
+      try {
+        const hist = JSON.parse(localStorage.getItem('scanHistory') || '[]');
+        sel.innerHTML = '<option value="">History</option>' + hist.map((h,i)=>`<option value="${i}">Set ${i+1}</option>`).join('');
+      } catch {
+        sel.innerHTML = '<option value="">History</option>';
+      }
+    }
+
+    function loadHistory(valueIndex) {
+      try {
+        const hist = JSON.parse(localStorage.getItem('scanHistory') || '[]');
+        const idx = parseInt(valueIndex,10);
+        if (Number.isFinite(idx) && hist[idx]) {
+          document.getElementById('urlInput').value = hist[idx];
+          // Apply dedupe/sanitize on load if toggles are on
+          try { refreshTextareaFromToggles(); } catch {}
+        }
+      } catch {}
+    }
+
+    function copyAsCurl() {
+      const urls = currentUrlsFromTextarea();
+      if (!urls.length) { alert('No URLs to copy.'); return; }
+      const payload = JSON.stringify({urls});
+      const curl = `curl -s -X POST 'http://127.0.0.1:8000/api/scan_urls' -H 'Content-Type: application/json' -d '${payload.replace(/'/g, "'\\''")}'`;
+      navigator.clipboard.writeText(curl).then(()=>showToast('cURL copied', 'success')).catch(()=>alert('Failed to copy cURL'));
+    }
+
     function initializeTooltips() {
       const tooltipElements = [
         { id: 'scanButton', text: 'Scan URLs for security threats (Ctrl+Enter)' },
         { id: 'copyBtn', text: 'Copy results to clipboard (Ctrl+Shift+C)' },
         { id: 'exportCsvBtn', text: 'Download results as CSV file' },
         { id: 'exportJsonBtn', text: 'Download results as JSON file' },
-        { id: 'darkToggle', text: 'Toggle dark/light theme' }
+        { id: 'darkModeToggle', text: 'Toggle dark/light theme' }
       ];
 
       tooltipElements.forEach(item => {
@@ -626,33 +749,59 @@
 
     // Initialize tooltips when page loads
     document.addEventListener('DOMContentLoaded', function() {
+      // Populate quick wins controls added via HTML
+      const qaBar = document.querySelector('.quick-actions');
+      if (qaBar) {
+        // Insert history select, dedupe/sanitize toggles, density, and copy as curl
+        const frag = document.createElement('span');
+        frag.innerHTML = `
+          <select id="historySelect" class="qa-select" title="Recent inputs" onchange="loadHistory(this.value)">
+            <option value="">History</option>
+          </select>
+          <label class="qa-toggle" title="Deduplicate URLs"><input type="checkbox" id="dedupeToggle" /><span class="qa-toggle-slider">DeDupe</span></label>
+          <label class="qa-toggle" title="Remove tracking params"><input type="checkbox" id="sanitizeToggle" /><span class="qa-toggle-slider">Clean</span></label>
+          <button class="qa-btn" id="densityBtn" title="Toggle compact table"><span class="qa-text">Density</span></button>
+          	<label class="qa-toggle" title="Prefer cached VT results">	<input type="checkbox" id="useCacheToggle" />	<span class="qa-toggle-slider wide">Cache</span>	</label>
+          <button class="qa-btn" id="copyCurlBtn" title="Copy as cURL" onclick="copyAsCurl()"><span class="qa-text">cURL</span></button>
+        `;
+        qaBar.insertBefore(frag, qaBar.querySelector('.vt-badge'));
+        // Wire toggles to immediately transform textarea
+        const dedupe = document.getElementById('dedupeToggle');
+        const sanitize = document.getElementById('sanitizeToggle');
+        if (dedupe) dedupe.addEventListener('change', refreshTextareaFromToggles);
+        if (sanitize) sanitize.addEventListener('change', refreshTextareaFromToggles);
+      }
       initializeTooltips();
       initializeDarkMode();
+      initializeUrlInputNormalization();
+      wireAutoscan();
+      fetchVTStatus();
     });
 
     // Progress bar functions
-    function updateProgress(current, total) {
-      const percentage = Math.round((current / total) * 100);
+    function updateProgress(completed, total) {
+      const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
       const progressBar = document.getElementById('progressBar');
       const progressText = document.getElementById('progressText');
-      
+      const meta = document.getElementById('progressMeta');
+
       progressBar.style.width = percentage + '%';
       progressText.textContent = percentage + '%';
-    }
 
-    function simulateProgress(totalUrls) {
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += Math.random() * 15; // Random increment
-        if (progress >= 95) {
-          progress = 95; // Stay at 95% until real completion
-          clearInterval(interval);
+      // Live counter and ETA
+      let etaText = '—';
+      if (progressStartTime && completed > 0) {
+        const elapsedMs = Date.now() - progressStartTime;
+        const rate = completed / (elapsedMs / 1000); // items per second
+        const remaining = Math.max(total - completed, 0);
+        if (rate > 0) {
+          const etaSec = Math.round(remaining / rate);
+          const mm = String(Math.floor(etaSec / 60)).padStart(2, '0');
+          const ss = String(etaSec % 60).padStart(2, '0');
+          etaText = `${mm}:${ss}`;
         }
-        updateProgress(progress, 100);
-      }, 200);
-      
-      // Store interval ID to clear it when scan completes
-      window.progressInterval = interval;
+      }
+      meta.textContent = `${completed}/${total} • ETA ${etaText}`;
     }
   </script>
 </body>

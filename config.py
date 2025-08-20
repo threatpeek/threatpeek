@@ -12,7 +12,7 @@ class Config:
     
     # Timeouts & Limits
     HTTP_TIMEOUT: float = float(os.getenv("HTTP_TIMEOUT", "10.0"))
-    MAX_URLS_PER_REQUEST: int = int(os.getenv("MAX_URLS_PER_REQUEST", "10"))
+    MAX_URLS_PER_REQUEST: int = int(os.getenv("MAX_URLS_PER_REQUEST", "500"))
     
     # Security thresholds
     ENTROPY_THRESHOLD: float = float(os.getenv("ENTROPY_THRESHOLD", "4.5"))

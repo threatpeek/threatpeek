@@ -30,12 +30,14 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 templates = Jinja2Templates(directory="templates")
 
 # ✅ Custom error handler for validation errors
+from fastapi.encoders import jsonable_encoder
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     logger.error(f"Validation error: {exc} for request: {request.url}")
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors(), "body": exc.body},
+        content=jsonable_encoder({"detail": exc.errors(), "body": exc.body}),
     )
 
 # ✅ Custom middleware for handling errors

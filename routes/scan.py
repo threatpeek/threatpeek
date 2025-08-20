@@ -7,7 +7,6 @@ import os
 from dotenv import load_dotenv
 from typing import List
 import base64
-
 from models.scan_models import URLScanRequest, URLScanResponse
 from logger import logger, log_request
 from utils.ssl_check import async_ssl_check
@@ -102,35 +101,70 @@ async def scan_urls(request: URLScanRequest):
 
     for url in request.urls:
         url = url.strip()
-        if not url.startswith("http"):
+        # Preserve existing scheme (ftp, custom, etc.). If no scheme, default to https://
+        if "://" not in url:
             url = "https://" + url
+
+        # Query VirusTotal first to get a reputation verdict regardless of DNS/SSL outcome
+        vt_status, vt_detail, vendors = await query_virustotal(url)
+        if vt_status in ("malicious", "suspicious"):
+            log_request(url, vt_status, vt_detail)
+            results.append(URLScanResponse(url=url, status=vt_status, details=vt_detail, vendors=vendors))
+            continue
+
         parsed = urlparse(url)
         domain = parsed.netloc.lower()
         path = parsed.path.lower()
 
-        if not domain or domain.startswith('.') or domain.endswith('.'):
-            results.append(URLScanResponse(url=url, status="invalid", details="Invalid domain"))
+        # Non-HTTP protocols are considered suspicious in this scanner
+        if parsed.scheme not in ("http", "https"):
+            status = "suspicious"
+            detail = f"Unsupported scheme: {parsed.scheme} — non-HTTP protocol"
+            log_request(url, status, detail)
+            results.append(URLScanResponse(url=url, status=status, details=detail, vendors=vendors if vendors else None))
             continue
 
+        if not domain or domain.startswith('.') or domain.endswith('.'):
+            status = "invalid"
+            detail = "Invalid domain"
+            log_request(url, status, detail)
+            results.append(URLScanResponse(url=url, status=status, details=detail, vendors=vendors if vendors else None))
+            continue
+
+        dns_ok = True
         try:
             socket.gethostbyname(domain)
         except socket.gaierror:
-            results.append(URLScanResponse(url=url, status="invalid", details="DNS resolution failed"))
+            dns_ok = False
+
+        if not dns_ok:
+            # Fall back to VT result if available
+            status = vt_status if vt_status == "clean" else "invalid"
+            detail = vt_detail if vt_status == "clean" else "DNS resolution failed"
+            log_request(url, status, detail)
+            results.append(URLScanResponse(url=url, status=status, details=detail, vendors=vendors if vt_status == "clean" else None))
             continue
 
         ssl_ok, ssl_issues = await async_ssl_check(domain)
         if not ssl_ok:
-            results.append(URLScanResponse(url=url, status="suspicious", details="SSL: " + " | ".join(ssl_issues)))
+            status = "suspicious"
+            detail = "SSL: " + " | ".join(ssl_issues)
+            log_request(url, status, detail)
+            results.append(URLScanResponse(url=url, status=status, details=detail, vendors=vendors if vendors else None))
             continue
 
         if is_high_entropy(path):
-            results.append(URLScanResponse(url=url, status="suspicious", details="High entropy in path"))
+            status = "suspicious"
+            detail = "High entropy in path"
+            log_request(url, status, detail)
+            results.append(URLScanResponse(url=url, status=status, details=detail, vendors=vendors if vendors else None))
             continue
 
-        vt_status, vt_detail, vendors = await query_virustotal(url)
-        # Always trust VirusTotal verdicts
-        log_request(url, vt_status, vt_detail)
-        results.append(URLScanResponse(url=url, status=vt_status, details=vt_detail, vendors=vendors))
+        # If we reach here, heuristics are fine; use VT verdict if clean or VT error
+        final_status = vt_status if vt_status in ("clean", "suspicious", "malicious") else "clean"
+        final_detail = vt_detail if vt_status == "clean" else (vt_detail or "No threats found by heuristics")
+        log_request(url, final_status, final_detail)
+        results.append(URLScanResponse(url=url, status=final_status, details=final_detail, vendors=vendors if vt_status == "clean" else None))
 
     return results
 
@@ -167,6 +201,10 @@ async def export_scan_results_csv(request: URLScanRequest):
         headers={"Content-Disposition": "attachment; filename=threatpeek_scan_results.csv"}
     )
 
+
+@router.get("/status/config")
+async def config_status():
+    return {"vt_present": bool(VT_API_KEY)}
 
 @router.post("/export/json")
 async def export_scan_results_json(request: URLScanRequest):

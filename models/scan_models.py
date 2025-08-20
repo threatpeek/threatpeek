@@ -7,34 +7,37 @@ class URLScanRequest(BaseModel):
     urls: List[str] = Field(
         ..., 
         min_items=1, 
-        max_items=10,
-        description="List of URLs to scan (max 10)"
+        max_items=500,
+        description="List of URLs to scan (max 500)"
     )
     
     @validator('urls')
     def validate_urls(cls, v):
         cleaned_urls = []
         for url in v:
-            url = url.strip()
+            if url is None:
+                continue
+            url = str(url).strip()
             if not url:
                 continue
-                
-            # Add protocol if missing
-            if not url.startswith(('http://', 'https://')):
-                url = 'https://' + url
-            
-            # Basic URL format validation
-            try:
-                parsed = urlparse(url)
-                if not parsed.netloc:
-                    raise ValueError(f"Invalid URL format: {url}")
-                if len(url) > 2048:  # RFC 2616 recommends this limit
-                    raise ValueError(f"URL too long: {url}")
-            except Exception as e:
-                raise ValueError(f"Invalid URL: {url} - {str(e)}")
-                
-            cleaned_urls.append(url)
-        
+
+            # Normalize scheme:
+            # - If URL already has a scheme (any scheme), keep it as-is.
+            # - If no scheme, prefix https://
+            if re.match(r'^[a-zA-Z][a-zA-Z0-9+.-]*://', url):
+                normalized = url
+            else:
+                normalized = 'https://' + url
+
+            # Do not reject the entire request for malformed URLs here.
+            # Let the scanning route perform strict checks per-URL.
+            # We will only enforce an absolute max length to prevent abuse.
+            if len(normalized) > 4096:
+                # Truncate rather than raise; the route will classify as invalid later.
+                normalized = normalized[:4096]
+
+            cleaned_urls.append(normalized)
+
         if not cleaned_urls:
             raise ValueError("No valid URLs provided")
         return cleaned_urls
