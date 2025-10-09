@@ -1,19 +1,19 @@
 from typing import Optional, Dict, List
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from urllib.parse import urlparse
 import re
 
 class URLScanRequest(BaseModel):
     urls: List[str] = Field(
         ..., 
-        min_items=1, 
-        max_items=500,
+        min_length=1, 
+        max_length=500,
         description="List of URLs to scan (max 500)"
     )
     
-    @validator('urls')
-    def validate_urls(cls, v):
-        cleaned_urls = []
+    @field_validator('urls', mode='after')
+    def validate_urls(cls, v: List[str]) -> List[str]:
+        cleaned_urls: List[str] = []
         for url in v:
             if url is None:
                 continue

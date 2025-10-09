@@ -16,7 +16,7 @@ Environment variables
 - Required for full functionality
   - VT_API_KEY: VirusTotal API key used by routes/scan.py and utils/virustotal.py
 - Optional configuration (see config.py)
-  - HTTP_TIMEOUT, MAX_URLS_PER_REQUEST, ENTROPY_THRESHOLD, MAX_PATH_LENGTH, RATE_LIMIT_PER_MINUTE, PHISHTANK_API_KEY (future use)
+  - HTTP_TIMEOUT, MAX_URLS_PER_REQUEST, ENTROPY_THRESHOLD, MAX_PATH_LENGTH, RATE_LIMIT_PER_MINUTE, PHISHTANK_API_KEY (future use), VT_CACHE_TTL_SECONDS
 
 Common commands
 - Create and activate a venv (macOS/Linux)
@@ -42,29 +42,28 @@ Secrets handling in commands
 
 HTTP endpoints (as implemented)
 - API router (prefixed /api): routes/scan.py
+  - POST /api/scan_url: body {"url": "https://example.com"} → returns URLScanResponse (legacy compatibility)
   - POST /api/scan_urls: body {"urls": ["https://example.com", ...]} → returns List[URLScanResponse]
   - POST /api/export/csv: body as above → returns CSV
   - POST /api/export/json: body as above → returns JSON
+  - GET /api/status/config: returns {"vt_present": bool}
 - Dashboard
   - GET /dashboard → renders templates/threatpeek_frontend.html (static assets served from /static)
 - Health
   - GET /
 
-Important note on path mismatch in tests
-- Several tests (e.g., tests/dev_tests.py) target /api/scan_url (singular), but the service exposes /api/scan_urls (plural). Adjust tests or add a compatibility route before running the suite.
+Important note on route compatibility
+- A backward-compatible route POST /api/scan_url (singular) has been added to support existing tests and clients. The primary batched endpoint remains POST /api/scan_urls (plural).
 
 High-level architecture
 - Entry point: main.py
   - Initializes FastAPI app, loads .env, mounts /static, sets up Jinja2 templates, registers middleware and the /api router, and defines / and /dashboard routes.
   - Custom handler for RequestValidationError returns structured JSON.
 - Routing: routes/scan.py (APIRouter)
-  - query_virustotal(url):
-    - Submits URL to VT (POST /api/v3/urls) then fetches a report via a base64url-encoded URL key; aggregates last_analysis_stats and last_analysis_results into a vendors map.
   - enhanced_threat_analysis(url):
-    - Performs a real HTTP GET (httpx AsyncClient with redirects) and applies heuristics: blacklist, scheme validation, XSS pattern in path, path length, and HTTP status-based classification. Returns (status, detail).
-    - Note: the current scan flow relies on VirusTotal for the final verdict and does not call enhanced_threat_analysis from scan_urls; it remains a separate helper.
+    - Performs a real HTTP GET (httpx AsyncClient with redirects) and applies heuristics: blacklist, scheme validation, XSS pattern in path, path length, and HTTP status-based classification. Returns (status, detail). This helper is not invoked by scan_urls.
   - scan_urls(request: URLScanRequest):
-    - Per-URL pipeline: normalize scheme → parse → domain validation → DNS resolution (socket.gethostbyname) → SSL check (utils/ssl_check.async_ssl_check) → high entropy path check → VirusTotal classification (authoritative) → log_request() and append URLScanResponse.
+    - Heuristics-first pipeline: normalize scheme → parse → scheme/domain validation → DNS resolution (socket.gethostbyname, per-request cache) → SSL check (utils/ssl_check.async_ssl_check, per-request cache) → path length and entropy → VirusTotal classification via utils/virustotal.query_virustotal with in-memory TTL cache → log_request() and append URLScanResponse.
   - Export endpoints: reuse scan_urls to produce CSV/JSON payloads for download.
 - Models: models/scan_models.py
   - URLScanRequest: validates, normalizes up to 10 URLs, ensures protocol, enforces length and basic structure (urlparse).
@@ -72,7 +71,7 @@ High-level architecture
 - Utilities
   - utils/ssl_check.py: Performs synchronous certificate inspection in a thread executor; validates expiry and surfaces SSL/DNS issues as suspicious. Uses certifi and logs DNS resolution warnings via logger.
   - utils/analysis_helpers.py: Shannon entropy calculation and threshold check for path heuristics.
-  - utils/virustotal.py: Async helpers to submit URL and fetch report with x-apikey header. Not currently wired into routes (routes implement their own VT logic); keep in mind to avoid duplicated VT flows.
+  - utils/virustotal.py: Consolidated VirusTotal logic. Provides query_virustotal(url) which submits the URL and fetches a report; used by routes/scan.py.
 - Middleware: middleware/error_handler.py
   - UnifiedErrorHandlerMiddleware wraps requests, logs unhandled exceptions with traceback, and returns a uniform 500 JSON error response.
 - Logging: logger.py
@@ -83,7 +82,7 @@ High-level architecture
 Testing
 - Framework: pytest (see requirements.txt)
 - Where: tests/*.py use FastAPI TestClient against app from main.py
-- External requests: tests/mock_httpx_tests.py uses respx to stub httpx; ensure respx is installed.
+- External requests: tests/mock_httpx_tests.py uses respx to stub httpx; respx is pinned in requirements.txt.
 - Common test invocations
   - All tests: pytest -q
   - Single file: pytest tests/frontend_test.py -q
@@ -104,5 +103,14 @@ Key files to know
 - tests/: pytest suite targeting API behavior
 
 Docs and rules integration
-- README.md includes a feature list and tech stack; no CLAUDE/Cursor/Copilot instruction files were found; no existing WARP.md detected.
+- README.md includes a feature list and tech stack.
+
+Changelog
+- 2025-10-09
+  - Added a backward-compatible POST /api/scan_url route for singular requests (tests and existing clients).
+  - Removed printing of VT_API_KEY from main.py; now only logs presence to avoid leaking secrets.
+  - Pinned respx in requirements.txt (>=0.22,<0.23) to support httpx mocking in tests.
+  - Migrated models to Pydantic v2-style APIs: replaced @validator with @field_validator and min_items/max_items with min_length/max_length (removes deprecation warnings).
+  - Refactored /api/scan_urls to run heuristics first and then call utils/virustotal.query_virustotal for the final verdict (reduces VT calls and latency for obvious cases).
+  - Added in-memory TTL cache for VirusTotal verdicts (configurable via VT_CACHE_TTL_SECONDS) and per-request DNS/SSL caches to reduce redundant lookups.
 

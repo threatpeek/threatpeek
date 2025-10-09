@@ -15,8 +15,8 @@ from logger import logger
 load_dotenv()
 VT_API_KEY = os.getenv("VT_API_KEY")
 
-# ✅ Debug output to confirm .env loading (you can remove this after confirming)
-print("VT_API_KEY =", VT_API_KEY)
+# ✅ Avoid printing secrets; log only presence of VT_API_KEY
+logger.info("VT key present: %s", "yes" if VT_API_KEY else "no")
 
 # ✅ Set up FastAPI app
 app = FastAPI(title="ThreatPeek PH API")

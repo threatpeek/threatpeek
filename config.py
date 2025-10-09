@@ -18,6 +18,9 @@ class Config:
     ENTROPY_THRESHOLD: float = float(os.getenv("ENTROPY_THRESHOLD", "4.5"))
     MAX_PATH_LENGTH: int = int(os.getenv("MAX_PATH_LENGTH", "100"))
     
+    # Caching
+    VT_CACHE_TTL_SECONDS: int = int(os.getenv("VT_CACHE_TTL_SECONDS", "900"))
+    
     # Rate limiting
     RATE_LIMIT_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
     

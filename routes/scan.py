@@ -7,15 +7,18 @@ import os
 from dotenv import load_dotenv
 from typing import List
 import base64
+from pydantic import BaseModel
 from models.scan_models import URLScanRequest, URLScanResponse
 from logger import logger, log_request
 from utils.ssl_check import async_ssl_check
 from utils.analysis_helpers import is_high_entropy
+from utils.virustotal import query_virustotal
 from fastapi.responses import Response
 import csv
 import io
 import json
 from datetime import datetime
+from config import config
 
 router = APIRouter()
 load_dotenv()
@@ -31,41 +34,6 @@ VT_API_KEY = os.getenv("VT_API_KEY")
 VT_BASE_URL = "https://www.virustotal.com/api/v3/urls"
 
 
-async def query_virustotal(url: str) -> tuple[str, str, dict]:
-    try:
-        async with httpx.AsyncClient() as client:
-            headers = {"x-apikey": VT_API_KEY}
-
-            # Step 1: Submit URL
-            post_resp = await client.post(VT_BASE_URL, headers=headers, data={"url": url})
-            if post_resp.status_code != 200:
-                return "suspicious", f"VT POST failed: {post_resp.status_code}", {}
-
-            # Step 2: Encode & request report
-            b64_url = base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
-            get_resp = await client.get(f"{VT_BASE_URL}/{b64_url}", headers=headers)
-            if get_resp.status_code != 200:
-                return "suspicious", f"VT GET failed: {get_resp.status_code}", {}
-
-            data = get_resp.json()
-            stats = data["data"]["attributes"]["last_analysis_stats"]
-            vendors = {
-                vendor: res["category"]
-                for vendor, res in data["data"]["attributes"]["last_analysis_results"].items()
-            }
-
-            malicious = stats.get("malicious", 0)
-            suspicious = stats.get("suspicious", 0)
-
-            if malicious > 0:
-                return "malicious", f"Flagged as malicious by {malicious} VT engines.", vendors
-            elif suspicious > 0:
-                return "suspicious", f"Flagged as suspicious by {suspicious} VT engines.", vendors
-            else:
-                return "clean", "No threats found by VirusTotal.", vendors
-
-    except Exception as e:
-        return "suspicious", f"VT query error: {e}", {}
 
 
 async def enhanced_threat_analysis(url: str) -> tuple[str, str]:
@@ -95,76 +63,175 @@ async def enhanced_threat_analysis(url: str) -> tuple[str, str]:
         return "suspicious", f"Request error: {e}"
 
 
+# Legacy compatibility route to support tests/clients using singular endpoint
+class LegacyScanRequest(BaseModel):
+    url: str
+
+@router.post("/scan_url")
+async def scan_url_compat(payload: LegacyScanRequest):
+    raw = (payload.url or "").strip()
+    if not raw:
+        # Invalid when empty/whitespace
+        result = {"url": raw, "status": "invalid", "details": "Invalid domain"}
+        log_request(raw, result["status"], result["details"])
+        return result
+
+    url = raw if "://" in raw else "https://" + raw
+    parsed = urlparse(url)
+    domain = parsed.netloc.lower()
+    path = parsed.path or ""
+
+    # Unsupported scheme → suspicious (per tests)
+    if parsed.scheme not in ("http", "https"):
+        result = {"url": url, "status": "suspicious", "details": f"Unsupported scheme: {parsed.scheme}"}
+        log_request(url, result["status"], result["details"])
+        return result
+
+    # Basic domain sanity (must contain a dot and only valid hostname chars)
+    if (
+        not domain or domain.startswith('.') or domain.endswith('.') or
+        '.' not in domain or not re.fullmatch(r'[A-Za-z0-9.-]+', domain)
+    ):
+        result = {"url": url, "status": "invalid", "details": "Invalid domain"}
+        log_request(url, result["status"], result["details"])
+        return result
+
+    # Blacklist
+    if domain in BLACKLISTED_DOMAINS:
+        result = {"url": url, "status": "malicious", "details": f"Domain `{domain}` is blacklisted"}
+        log_request(url, result["status"], result["details"])
+        return result
+
+    # XSS payload
+    if re.search(r"(<script>|</script>|%3Cscript%3E|%3C%2Fscript%3E)", path, re.IGNORECASE):
+        result = {"url": url, "status": "suspicious", "details": "XSS payload detected"}
+        log_request(url, result["status"], result["details"])
+        return result
+
+    # Long path
+    if len(path) > 100:
+        result = {"url": url, "status": "suspicious", "details": "URL path unusually long"}
+        log_request(url, result["status"], result["details"])
+        return result
+
+    # High-entropy path
+    if is_high_entropy(path):
+        result = {"url": url, "status": "suspicious", "details": "High entropy in path"}
+        log_request(url, result["status"], result["details"])
+        return result
+
+    # SSL check for HTTPS
+    if parsed.scheme == "https":
+        ssl_ok, ssl_issues = await async_ssl_check(domain)
+        if not ssl_ok:
+            detail = "SSL: " + " | ".join(ssl_issues)
+            result = {"url": url, "status": "suspicious", "details": detail}
+            log_request(url, result["status"], result["details"])
+            return result
+
+    # Lightweight HTTP GET to observe final status
+    try:
+        async with httpx.AsyncClient(timeout=5.0, headers=HEADERS, follow_redirects=True) as client:
+            resp = await client.get(url)
+            code = resp.status_code
+            final_url = str(resp.url)
+            if code in (200, 301, 302, 307, 308):
+                result = {"url": final_url, "status": "clean", "details": "No threat detected"}
+            elif code in (401, 403, 404, 407) or (500 <= code < 600):
+                result = {"url": final_url, "status": "suspicious", "details": f"Returned error status: {code}"}
+            else:
+                result = {"url": final_url, "status": "suspicious", "details": f"Unexpected status code: {code}"}
+            log_request(final_url, result["status"], result["details"])
+            return result
+    except httpx.RequestError as e:
+        result = {"url": url, "status": "suspicious", "details": f"Request error: {e}"}
+        log_request(url, result["status"], result["details"])
+        return result
+
+
 @router.post("/scan_urls", response_model=List[URLScanResponse])
 async def scan_urls(request: URLScanRequest):
-    results = []
+    results: List[URLScanResponse] = []
 
-    for url in request.urls:
-        url = url.strip()
-        # Preserve existing scheme (ftp, custom, etc.). If no scheme, default to https://
+    # Per-request caches
+    dns_cache: dict[str, bool] = {}
+    ssl_cache: dict[str, tuple[bool, list[str]]] = {}
+
+    for raw in request.urls:
+        url = raw.strip()
         if "://" not in url:
             url = "https://" + url
 
-        # Query VirusTotal first to get a reputation verdict regardless of DNS/SSL outcome
-        vt_status, vt_detail, vendors = await query_virustotal(url)
-        if vt_status in ("malicious", "suspicious"):
-            log_request(url, vt_status, vt_detail)
-            results.append(URLScanResponse(url=url, status=vt_status, details=vt_detail, vendors=vendors))
-            continue
-
         parsed = urlparse(url)
         domain = parsed.netloc.lower()
-        path = parsed.path.lower()
+        path = (parsed.path or "").lower()
 
-        # Non-HTTP protocols are considered suspicious in this scanner
+        # 1) Protocol check
         if parsed.scheme not in ("http", "https"):
             status = "suspicious"
             detail = f"Unsupported scheme: {parsed.scheme} — non-HTTP protocol"
             log_request(url, status, detail)
-            results.append(URLScanResponse(url=url, status=status, details=detail, vendors=vendors if vendors else None))
+            results.append(URLScanResponse(url=url, status=status, details=detail))
             continue
 
+        # 2) Domain sanity
         if not domain or domain.startswith('.') or domain.endswith('.'):
             status = "invalid"
             detail = "Invalid domain"
             log_request(url, status, detail)
-            results.append(URLScanResponse(url=url, status=status, details=detail, vendors=vendors if vendors else None))
+            results.append(URLScanResponse(url=url, status=status, details=detail))
             continue
 
-        dns_ok = True
-        try:
-            socket.gethostbyname(domain)
-        except socket.gaierror:
-            dns_ok = False
-
+        # 3) DNS resolution (per-request cache)
+        dns_ok = dns_cache.get(domain)
+        if dns_ok is None:
+            try:
+                socket.gethostbyname(domain)
+                dns_ok = True
+            except socket.gaierror:
+                dns_ok = False
+            dns_cache[domain] = dns_ok
         if not dns_ok:
-            # Fall back to VT result if available
-            status = vt_status if vt_status == "clean" else "invalid"
-            detail = vt_detail if vt_status == "clean" else "DNS resolution failed"
+            status = "invalid"
+            detail = "DNS resolution failed"
             log_request(url, status, detail)
-            results.append(URLScanResponse(url=url, status=status, details=detail, vendors=vendors if vt_status == "clean" else None))
+            results.append(URLScanResponse(url=url, status=status, details=detail))
             continue
 
-        ssl_ok, ssl_issues = await async_ssl_check(domain)
-        if not ssl_ok:
+        # 4) SSL check for HTTPS (per-request cache)
+        if parsed.scheme == "https":
+            cached_ssl = ssl_cache.get(domain)
+            if cached_ssl is None:
+                cached_ssl = await async_ssl_check(domain)
+                ssl_cache[domain] = cached_ssl
+            ssl_ok, ssl_issues = cached_ssl
+            if not ssl_ok:
+                status = "suspicious"
+                detail = "SSL: " + " | ".join(ssl_issues)
+                log_request(url, status, detail)
+                results.append(URLScanResponse(url=url, status=status, details=detail))
+                continue
+
+        # 5) Path heuristics
+        if len(path) > config.MAX_PATH_LENGTH:
             status = "suspicious"
-            detail = "SSL: " + " | ".join(ssl_issues)
+            detail = "URL path unusually long"
             log_request(url, status, detail)
-            results.append(URLScanResponse(url=url, status=status, details=detail, vendors=vendors if vendors else None))
+            results.append(URLScanResponse(url=url, status=status, details=detail))
             continue
 
         if is_high_entropy(path):
             status = "suspicious"
             detail = "High entropy in path"
             log_request(url, status, detail)
-            results.append(URLScanResponse(url=url, status=status, details=detail, vendors=vendors if vendors else None))
+            results.append(URLScanResponse(url=url, status=status, details=detail))
             continue
 
-        # If we reach here, heuristics are fine; use VT verdict if clean or VT error
-        final_status = vt_status if vt_status in ("clean", "suspicious", "malicious") else "clean"
-        final_detail = vt_detail if vt_status == "clean" else (vt_detail or "No threats found by heuristics")
-        log_request(url, final_status, final_detail)
-        results.append(URLScanResponse(url=url, status=final_status, details=final_detail, vendors=vendors if vt_status == "clean" else None))
+        # 6) VirusTotal (authoritative verdict after heuristics pass)
+        vt_status, vt_detail, vendors = await query_virustotal(url)
+        log_request(url, vt_status, vt_detail)
+        include_vendors = vendors if vt_status in ("malicious", "suspicious") and vendors else None
+        results.append(URLScanResponse(url=url, status=vt_status, details=vt_detail, vendors=include_vendors))
 
     return results
 
