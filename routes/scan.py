@@ -19,6 +19,12 @@ import io
 import json
 from datetime import datetime
 from config import config
+from utils.rank_provider import (
+    get_global_rank,
+    rank_bucket_for,
+    registrable_domain,
+    is_ready as rank_ready,
+)
 
 router = APIRouter()
 load_dotenv()
@@ -81,9 +87,14 @@ async def scan_url_compat(payload: LegacyScanRequest):
     domain = parsed.netloc.lower()
     path = parsed.path or ""
 
+    # Ranking info (registrable domain)
+    rd = registrable_domain(domain) if domain else None
+    gr, rsrc = get_global_rank(rd) if rd else (None, None)
+    rb = rank_bucket_for(gr) if gr else None
+
     # Unsupported scheme → suspicious (per tests)
     if parsed.scheme not in ("http", "https"):
-        result = {"url": url, "status": "suspicious", "details": f"Unsupported scheme: {parsed.scheme}"}
+        result = {"url": url, "status": "suspicious", "details": f"Unsupported scheme: {parsed.scheme}", "global_rank": gr, "rank_bucket": rb, "rank_source": rsrc}
         log_request(url, result["status"], result["details"])
         return result
 
@@ -92,31 +103,31 @@ async def scan_url_compat(payload: LegacyScanRequest):
         not domain or domain.startswith('.') or domain.endswith('.') or
         '.' not in domain or not re.fullmatch(r'[A-Za-z0-9.-]+', domain)
     ):
-        result = {"url": url, "status": "invalid", "details": "Invalid domain"}
+        result = {"url": url, "status": "invalid", "details": "Invalid domain", "global_rank": gr, "rank_bucket": rb, "rank_source": rsrc}
         log_request(url, result["status"], result["details"])
         return result
 
     # Blacklist
     if domain in BLACKLISTED_DOMAINS:
-        result = {"url": url, "status": "malicious", "details": f"Domain `{domain}` is blacklisted"}
+        result = {"url": url, "status": "malicious", "details": f"Domain `{domain}` is blacklisted", "global_rank": gr, "rank_bucket": rb, "rank_source": rsrc}
         log_request(url, result["status"], result["details"])
         return result
 
     # XSS payload
     if re.search(r"(<script>|</script>|%3Cscript%3E|%3C%2Fscript%3E)", path, re.IGNORECASE):
-        result = {"url": url, "status": "suspicious", "details": "XSS payload detected"}
+        result = {"url": url, "status": "suspicious", "details": "XSS payload detected", "global_rank": gr, "rank_bucket": rb, "rank_source": rsrc}
         log_request(url, result["status"], result["details"])
         return result
 
     # Long path
     if len(path) > 100:
-        result = {"url": url, "status": "suspicious", "details": "URL path unusually long"}
+        result = {"url": url, "status": "suspicious", "details": "URL path unusually long", "global_rank": gr, "rank_bucket": rb, "rank_source": rsrc}
         log_request(url, result["status"], result["details"])
         return result
 
     # High-entropy path
     if is_high_entropy(path):
-        result = {"url": url, "status": "suspicious", "details": "High entropy in path"}
+        result = {"url": url, "status": "suspicious", "details": "High entropy in path", "global_rank": gr, "rank_bucket": rb, "rank_source": rsrc}
         log_request(url, result["status"], result["details"])
         return result
 
@@ -125,7 +136,7 @@ async def scan_url_compat(payload: LegacyScanRequest):
         ssl_ok, ssl_issues = await async_ssl_check(domain)
         if not ssl_ok:
             detail = "SSL: " + " | ".join(ssl_issues)
-            result = {"url": url, "status": "suspicious", "details": detail}
+            result = {"url": url, "status": "suspicious", "details": detail, "global_rank": gr, "rank_bucket": rb, "rank_source": rsrc}
             log_request(url, result["status"], result["details"])
             return result
 
@@ -136,15 +147,15 @@ async def scan_url_compat(payload: LegacyScanRequest):
             code = resp.status_code
             final_url = str(resp.url)
             if code in (200, 301, 302, 307, 308):
-                result = {"url": final_url, "status": "clean", "details": "No threat detected"}
+                result = {"url": final_url, "status": "clean", "details": "No threat detected", "global_rank": gr, "rank_bucket": rb, "rank_source": rsrc}
             elif code in (401, 403, 404, 407) or (500 <= code < 600):
-                result = {"url": final_url, "status": "suspicious", "details": f"Returned error status: {code}"}
+                result = {"url": final_url, "status": "suspicious", "details": f"Returned error status: {code}", "global_rank": gr, "rank_bucket": rb, "rank_source": rsrc}
             else:
-                result = {"url": final_url, "status": "suspicious", "details": f"Unexpected status code: {code}"}
+                result = {"url": final_url, "status": "suspicious", "details": f"Unexpected status code: {code}", "global_rank": gr, "rank_bucket": rb, "rank_source": rsrc}
             log_request(final_url, result["status"], result["details"])
             return result
     except httpx.RequestError as e:
-        result = {"url": url, "status": "suspicious", "details": f"Request error: {e}"}
+        result = {"url": url, "status": "suspicious", "details": f"Request error: {e}", "global_rank": gr, "rank_bucket": rb, "rank_source": rsrc}
         log_request(url, result["status"], result["details"])
         return result
 
@@ -166,12 +177,17 @@ async def scan_urls(request: URLScanRequest):
         domain = parsed.netloc.lower()
         path = (parsed.path or "").lower()
 
+        # Ranking precompute
+        rd = registrable_domain(domain) if domain else None
+        gr, rsrc = get_global_rank(rd) if rd else (None, None)
+        rb = rank_bucket_for(gr) if gr else None
+
         # 1) Protocol check
         if parsed.scheme not in ("http", "https"):
             status = "suspicious"
             detail = f"Unsupported scheme: {parsed.scheme} — non-HTTP protocol"
             log_request(url, status, detail)
-            results.append(URLScanResponse(url=url, status=status, details=detail))
+            results.append(URLScanResponse(url=url, status=status, details=detail, global_rank=gr, rank_bucket=rb, rank_source=rsrc))
             continue
 
         # 2) Domain sanity
@@ -179,7 +195,7 @@ async def scan_urls(request: URLScanRequest):
             status = "invalid"
             detail = "Invalid domain"
             log_request(url, status, detail)
-            results.append(URLScanResponse(url=url, status=status, details=detail))
+            results.append(URLScanResponse(url=url, status=status, details=detail, global_rank=gr, rank_bucket=rb, rank_source=rsrc))
             continue
 
         # 3) DNS resolution (per-request cache)
@@ -195,7 +211,7 @@ async def scan_urls(request: URLScanRequest):
             status = "invalid"
             detail = "DNS resolution failed"
             log_request(url, status, detail)
-            results.append(URLScanResponse(url=url, status=status, details=detail))
+            results.append(URLScanResponse(url=url, status=status, details=detail, global_rank=gr, rank_bucket=rb, rank_source=rsrc))
             continue
 
         # 4) SSL check for HTTPS (per-request cache)
@@ -209,7 +225,7 @@ async def scan_urls(request: URLScanRequest):
                 status = "suspicious"
                 detail = "SSL: " + " | ".join(ssl_issues)
                 log_request(url, status, detail)
-                results.append(URLScanResponse(url=url, status=status, details=detail))
+                results.append(URLScanResponse(url=url, status=status, details=detail, global_rank=gr, rank_bucket=rb, rank_source=rsrc))
                 continue
 
         # 5) Path heuristics
@@ -217,21 +233,21 @@ async def scan_urls(request: URLScanRequest):
             status = "suspicious"
             detail = "URL path unusually long"
             log_request(url, status, detail)
-            results.append(URLScanResponse(url=url, status=status, details=detail))
+            results.append(URLScanResponse(url=url, status=status, details=detail, global_rank=gr, rank_bucket=rb, rank_source=rsrc))
             continue
 
         if is_high_entropy(path):
             status = "suspicious"
             detail = "High entropy in path"
             log_request(url, status, detail)
-            results.append(URLScanResponse(url=url, status=status, details=detail))
+            results.append(URLScanResponse(url=url, status=status, details=detail, global_rank=gr, rank_bucket=rb, rank_source=rsrc))
             continue
 
         # 6) VirusTotal (authoritative verdict after heuristics pass)
         vt_status, vt_detail, vendors = await query_virustotal(url)
         log_request(url, vt_status, vt_detail)
         include_vendors = vendors if vt_status in ("malicious", "suspicious") and vendors else None
-        results.append(URLScanResponse(url=url, status=vt_status, details=vt_detail, vendors=include_vendors))
+        results.append(URLScanResponse(url=url, status=vt_status, details=vt_detail, vendors=include_vendors, global_rank=gr, rank_bucket=rb, rank_source=rsrc))
 
     return results
 
@@ -246,7 +262,7 @@ async def export_scan_results_csv(request: URLScanRequest):
     writer = csv.writer(output)
     
     # Write header
-    writer.writerow(['URL', 'Status', 'Details', 'Timestamp'])
+    writer.writerow(['URL', 'Status', 'Details', 'GlobalRank', 'RankBucket', 'Timestamp'])
     
     # Write data rows
     timestamp = datetime.utcnow().isoformat()
@@ -255,6 +271,8 @@ async def export_scan_results_csv(request: URLScanRequest):
             result.url,
             result.status,
             result.details,
+            result.global_rank if getattr(result, 'global_rank', None) is not None else '',
+            result.rank_bucket or '',
             timestamp
         ])
     
@@ -271,7 +289,7 @@ async def export_scan_results_csv(request: URLScanRequest):
 
 @router.get("/status/config")
 async def config_status():
-    return {"vt_present": bool(VT_API_KEY)}
+    return {"vt_present": bool(VT_API_KEY), "rank_present": rank_ready()}
 
 @router.post("/export/json")
 async def export_scan_results_json(request: URLScanRequest):
@@ -287,7 +305,9 @@ async def export_scan_results_json(request: URLScanRequest):
                 "url": result.url,
                 "status": result.status,
                 "details": result.details,
-                "vendors": result.vendors
+                "vendors": result.vendors,
+                "global_rank": result.global_rank,
+                "rank_bucket": result.rank_bucket
             }
             for result in results
         ]

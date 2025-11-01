@@ -20,6 +20,14 @@ class Config:
     
     # Caching
     VT_CACHE_TTL_SECONDS: int = int(os.getenv("VT_CACHE_TTL_SECONDS", "900"))
+
+    # Ranking (Tranco snapshot)
+    TRANCO_SNAPSHOT_PATH: str = os.getenv(
+        "TRANCO_SNAPSHOT_PATH",
+        os.path.join(os.path.dirname(__file__), "data", "tranco_top1m.csv"),
+    )
+    TRANCO_MAX_RANK: int = int(os.getenv("TRANCO_MAX_RANK", "1000000"))
+    RANKING_ENABLED: bool = os.getenv("RANKING_ENABLED", "true").lower() in ("1", "true", "yes", "on")
     
     # Rate limiting
     RATE_LIMIT_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))

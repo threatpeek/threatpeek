@@ -34,6 +34,7 @@
             <span class="qa-toggle-slider">Auto</span>
           </label>
           <span class="vt-badge" id="vtStatus" title="VirusTotal API status">VT: …</span>
+          <span class="vt-badge" id="rankStatus" title="Ranking data status">Rank: …</span>
           <button class="qa-btn ghost" id="settingsBtn" title="Settings" aria-haspopup="true" aria-expanded="false" onclick="toggleSettings()">
             <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M19.14 12.94a7.49 7.49 0 000-1.88l2.03-1.58a.5.5 0 00.12-.64l-1.92-3.32a.5.5 0 00-.6-.22l-2.39.96a7.51 7.51 0 00-1.63-.95l-.36-2.54a.5.5 0 00-.5-.43h-3.84a.5.5 0 00-.5.43l-.36 2.54c-.58.23-1.13.54-1.63.95l-2.39-.96a.5.5 0 00-.6.22L2.71 8.84a.5.5 0 00.12.64l2.03 1.58a7.49 7.49 0 000 1.88l-2.03 1.58a.5.5 0 00-.12.64l1.92 3.32a.5.5 0 00.6.22l2.39-.96c.5.41 1.05.72 1.63.95l.36 2.54a.5.5 0 00.5.43h3.84a.5.5 0 00.5-.43l.36-2.54c.58-.23 1.13-.54 1.63-.95l2.39.96a.5.5 0 00.6-.22l1.92-3.32a.5.5 0 00-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1115.5 12 3.5 3.5 0 0112 15.5z"/></svg></span>
           </button>
@@ -144,6 +145,7 @@
             <th>URL</th>
             <th>Status</th>
             <th>Details</th>
+            <th>Rank</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -227,19 +229,33 @@
         const res = await fetch('/api/status/config');
         if (!res.ok) throw new Error('status ' + res.status);
         const data = await res.json();
-        const el = document.getElementById('vtStatus');
+        const vtEl = document.getElementById('vtStatus');
         if (data.vt_present) {
-          el.textContent = 'VT: OK';
-          el.style.borderColor = '#198754';
-          el.style.color = '#198754';
+          vtEl.textContent = 'VT: OK';
+          vtEl.style.borderColor = '#198754';
+          vtEl.style.color = '#198754';
         } else {
-          el.textContent = 'VT: Missing';
-          el.style.borderColor = '#dc3545';
-          el.style.color = '#dc3545';
+          vtEl.textContent = 'VT: Missing';
+          vtEl.style.borderColor = '#dc3545';
+          vtEl.style.color = '#dc3545';
+        }
+        const rkEl = document.getElementById('rankStatus');
+        if (rkEl) {
+          if (data.rank_present) {
+            rkEl.textContent = 'Rank: OK';
+            rkEl.style.borderColor = '#198754';
+            rkEl.style.color = '#198754';
+          } else {
+            rkEl.textContent = 'Rank: Missing';
+            rkEl.style.borderColor = '#dc3545';
+            rkEl.style.color = '#dc3545';
+          }
         }
       } catch (e) {
-        const el = document.getElementById('vtStatus');
-        el.textContent = 'VT: Unknown';
+        const vtEl = document.getElementById('vtStatus');
+        vtEl.textContent = 'VT: Unknown';
+        const rkEl = document.getElementById('rankStatus');
+        if (rkEl) rkEl.textContent = 'Rank: Unknown';
       }
     }
 
@@ -502,11 +518,13 @@
         return;
       }
 
-      const csvHeader = 'URL,Status,Details,Timestamp\n';
+      const csvHeader = 'URL,Status,Details,GlobalRank,RankBucket,Timestamp\n';
       const csvRows = currentScanResults.map(result => {
         const timestamp = new Date().toISOString();
-        const cleanDetails = result.details.replace(/"/g, '""');
-        return `"${result.url}","${result.status}","${cleanDetails}","${timestamp}"`;
+        const cleanDetails = result.details.replace(/\"/g, '\"\"');
+        const gr = (result.global_rank ?? '')
+        const rb = (result.rank_bucket ?? '')
+        return `\"${result.url}\",\"${result.status}\",\"${cleanDetails}\",\"${gr}\",\"${rb}\",\"${timestamp}\"`;
       }).join('\n');
 
       const csvContent = csvHeader + csvRows;
@@ -526,7 +544,9 @@
           url: result.url,
           status: result.status,
           details: result.details,
-          vendors: result.vendors || null
+          vendors: result.vendors || null,
+          global_rank: result.global_rank ?? null,
+          rank_bucket: result.rank_bucket ?? null
         }))
       };
 
@@ -570,10 +590,13 @@
         `;
       }
       const row = document.createElement("tr");
+      const rankText = result.rank_bucket ? result.rank_bucket : '—';
+      const rankTitle = result.global_rank ? ` title="#${result.global_rank}"` : '';
       row.innerHTML = `
         <td>${result.url}</td>
         <td class="status ${colorClass}">${result.status}</td>
         <td>${result.details || ''}${vendorsHtml}</td>
+        <td${rankTitle}>${rankText}</td>
       `;
       tbody.appendChild(row);
     }

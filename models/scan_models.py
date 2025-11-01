@@ -49,6 +49,10 @@ class URLScanResponse(BaseModel):
     confidence: Optional[float] = Field(None, description="Confidence score 0-1")
     vendors: Optional[Dict[str, str]] = None
     timestamp: Optional[str] = None
+    # Optional ranking info
+    global_rank: Optional[int] = None
+    rank_bucket: Optional[str] = Field(None, description="Top 10k, Top 100k, Top 1M, or Not in Top 1M")
+    rank_source: Optional[str] = Field(None, description="Source of ranking data (e.g., tranco)")
     
 class ScanSummary(BaseModel):
     total_urls: int
