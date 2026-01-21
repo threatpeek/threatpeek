@@ -131,6 +131,14 @@ async def scan_url_compat(payload: LegacyScanRequest):
         log_request(url, result["status"], result["details"])
         return result
 
+    # DNS resolution check: classify unresolvable domains as invalid
+    try:
+        socket.gethostbyname(domain)
+    except socket.gaierror:
+        result = {"url": url, "status": "invalid", "details": "DNS resolution failed", "global_rank": gr, "rank_bucket": rb, "rank_source": rsrc}
+        log_request(url, result["status"], result["details"])
+        return result
+
     # SSL check for HTTPS
     if parsed.scheme == "https":
         ssl_ok, ssl_issues = await async_ssl_check(domain)

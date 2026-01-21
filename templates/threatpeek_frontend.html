@@ -580,12 +580,25 @@
       let vendorsHtml = "";
       if ((result.status === "malicious" || result.status === "suspicious") &&
           result.vendors && Object.keys(result.vendors).length > 0) {
+        const entries = Object.entries(result.vendors);
+        const malicious = entries.filter(([, cat]) => String(cat).toLowerCase() === 'malicious').map(([v]) => v);
+        const suspicious = entries.filter(([, cat]) => String(cat).toLowerCase() === 'suspicious').map(([v]) => v);
+        const flaggedCount = malicious.length + suspicious.length;
+
+        const chips = (names, cls) => names.map(v => `<span class="vendor-chip ${cls}">${v}</span>`).join(' ');
+
+        const flaggedSection = `
+          ${malicious.length ? `<div class="vendor-group"><strong>Malicious:</strong> ${chips(malicious, 'malicious')}</div>` : ''}
+          ${suspicious.length ? `<div class="vendor-group"><strong>Suspicious:</strong> ${chips(suspicious, 'suspicious')}</div>` : ''}
+        `;
+
+        const fullList = entries.map(([v, d]) => `<li>${v}: ${d}</li>`).join('');
+
         vendorsHtml += `
           <details>
-            <summary>Show Vendor Details</summary>
-            <ul style="margin: 0;">
-              ${Object.entries(result.vendors).map(([v, d]) => `<li>${v}: ${d}</li>`).join("")}
-            </ul>
+            <summary>Vendor Details (${flaggedCount} flagged)</summary>
+            <div class="vendor-flags">${flaggedSection}</div>
+            <ul class="vendor-all">${fullList}</ul>
           </details>
         `;
       }

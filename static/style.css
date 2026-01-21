@@ -921,6 +921,25 @@ details ul {
   font-size: 0.9em;
 }
 
+/* Highlighted vendor chips */
+.vendor-flags { margin: 6px 0; display: flex; flex-direction: column; gap: 4px; }
+.vendor-group { display: block; }
+.vendor-chip {
+  display: inline-block;
+  margin: 2px 6px 0 0;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid transparent;
+  font-weight: 600;
+}
+.vendor-chip.malicious { background: #ffe3e6; color: #b21f2d; border-color: #f1aeb5; }
+.vendor-chip.suspicious { background: #fff3cd; color: #8c6d1f; border-color: #ffe69c; }
+
+/* Dark mode chip colors */
+body.dark-mode .vendor-chip.malicious { background: #2a1416; color: #f199a0; border-color: #7a2d36; }
+body.dark-mode .vendor-chip.suspicious { background: #2a2513; color: #ffd277; border-color: #7a5e1a; }
+
 /* 🌙 DARK MODE */
 body.dark-mode {
   background-color: #0d1117;
