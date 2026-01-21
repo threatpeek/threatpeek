@@ -17,6 +17,9 @@ class Config:
     # Security thresholds
     ENTROPY_THRESHOLD: float = float(os.getenv("ENTROPY_THRESHOLD", "4.5"))
     MAX_PATH_LENGTH: int = int(os.getenv("MAX_PATH_LENGTH", "100"))
+    # VT verdict thresholds
+    VT_MALICIOUS_THRESHOLD: int = int(os.getenv("VT_MALICIOUS_THRESHOLD", "3"))
+    VT_SUSPICIOUS_THRESHOLD: int = int(os.getenv("VT_SUSPICIOUS_THRESHOLD", "1"))
     
     # Caching
     VT_CACHE_TTL_SECONDS: int = int(os.getenv("VT_CACHE_TTL_SECONDS", "900"))

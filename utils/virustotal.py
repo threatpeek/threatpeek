@@ -90,10 +90,22 @@ async def query_virustotal(url: str) -> Tuple[str, str, Dict[str, str]]:
 
             malicious = stats.get("malicious", 0)
             suspicious = stats.get("suspicious", 0)
-            if malicious > 0:
-                status, detail = "malicious", f"Flagged as malicious by {malicious} VT engines."
-            elif suspicious > 0:
-                status, detail = "suspicious", f"Flagged as suspicious by {suspicious} VT engines."
+
+            mal_th = getattr(config, "VT_MALICIOUS_THRESHOLD", 3) or 3
+            susp_th = getattr(config, "VT_SUSPICIOUS_THRESHOLD", 1) or 1
+
+            if malicious >= mal_th:
+                status = "malicious"
+                detail = f"Flagged as malicious by {malicious} VT engines (>= {mal_th})."
+            elif malicious > 0 or suspicious >= susp_th:
+                parts = []
+                if malicious > 0:
+                    parts.append(f"{malicious} malicious")
+                if suspicious > 0:
+                    parts.append(f"{suspicious} suspicious")
+                joined = ", ".join(parts) if parts else "detections"
+                detail = f"VT detections: {joined} (below malicious threshold {mal_th})."
+                status = "suspicious"
             else:
                 status, detail = "clean", "No threats found by VirusTotal."
 

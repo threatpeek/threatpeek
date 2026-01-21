@@ -247,6 +247,11 @@ async def scan_urls(request: URLScanRequest):
         vt_status, vt_detail, vendors = await query_virustotal(url)
         log_request(url, vt_status, vt_detail)
         include_vendors = vendors if vt_status in ("malicious", "suspicious") and vendors else None
+        # Extra audit logging: list vendors that flagged the URL
+        if include_vendors:
+            flagged = [f"{k}:{v}" for k, v in include_vendors.items() if v not in ("harmless", "undetected")]
+            if flagged:
+                logger.info("Vendors flagged: " + ", ".join(flagged))
         results.append(URLScanResponse(url=url, status=vt_status, details=vt_detail, vendors=include_vendors, global_rank=gr, rank_bucket=rb, rank_source=rsrc))
 
     return results
