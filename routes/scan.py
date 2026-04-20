@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from urllib.parse import urlparse
 import re
 import httpx
@@ -26,6 +26,10 @@ from utils.rank_provider import (
     is_ready as rank_ready,
 )
 
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
 load_dotenv()
 
@@ -74,7 +78,8 @@ class LegacyScanRequest(BaseModel):
     url: str
 
 @router.post("/scan_url")
-async def scan_url_compat(payload: LegacyScanRequest):
+@limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute")
+async def scan_url_compat(request: Request, payload: LegacyScanRequest):
     raw = (payload.url or "").strip()
     if not raw:
         # Invalid when empty/whitespace
@@ -168,15 +173,17 @@ async def scan_url_compat(payload: LegacyScanRequest):
         return result
 
 
-@router.post("/scan_urls", response_model=List[URLScanResponse])
-async def scan_urls(request: URLScanRequest):
+async def _do_scan_urls(payload: URLScanRequest) -> List[URLScanResponse]:
+    """Core scanning logic, extracted so export endpoints can call it directly
+    without triggering the rate limiter a second time.
+    """
     results: List[URLScanResponse] = []
 
     # Per-request caches
     dns_cache: dict[str, bool] = {}
     ssl_cache: dict[str, tuple[bool, list[str]]] = {}
 
-    for raw in request.urls:
+    for raw in payload.urls:
         url = raw.strip()
         if "://" not in url:
             url = "https://" + url
@@ -265,10 +272,19 @@ async def scan_urls(request: URLScanRequest):
     return results
 
 
+async def scan_urls(payload: URLScanRequest):
+    return await _do_scan_urls(payload)
+@router.post("/scan_urls", response_model=List[URLScanResponse])
+@limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute")
+async def scan_urls_endpoint(request: Request, payload: URLScanRequest):
+    return await _do_scan_urls(payload)
+
+
 @router.post("/export/csv")
-async def export_scan_results_csv(request: URLScanRequest):
+@limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute")
+async def export_scan_results_csv(request: Request, payload: URLScanRequest):
     """Export scan results as CSV file"""
-    results = await scan_urls(request)  # Reuse the scan logic
+    results = await _do_scan_urls(payload)
     
     # Create CSV content
     output = io.StringIO()
@@ -305,9 +321,10 @@ async def config_status():
     return {"vt_present": bool(VT_API_KEY), "rank_present": rank_ready()}
 
 @router.post("/export/json")
-async def export_scan_results_json(request: URLScanRequest):
+@limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute")
+async def export_scan_results_json(request: Request, payload: URLScanRequest):
     """Export scan results as JSON file"""
-    results = await scan_urls(request)  # Reuse the scan logic
+    results = await _do_scan_urls(payload)
     
     # Create JSON structure
     export_data = {

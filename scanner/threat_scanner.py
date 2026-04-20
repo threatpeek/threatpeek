@@ -8,6 +8,7 @@ from datetime import datetime
 from config import config
 from utils.ssl_check import async_ssl_check
 from utils.analysis_helpers import is_high_entropy
+from utils.virustotal import query_virustotal
 from logger import logger
 
 class ThreatScanner:
@@ -24,7 +25,7 @@ class ThreatScanner:
             return "unknown", "VirusTotal API key not configured", {}
             
         try:
-            return await query_virustotal_async(self.url)
+            return await query_virustotal(self.url)
         except Exception as e:
             logger.error(f"VirusTotal scan failed for {self.url}: {e}")
             return "error", f"VirusTotal scan failed: {str(e)}", {}
