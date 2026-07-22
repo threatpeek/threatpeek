@@ -13,6 +13,10 @@ build/
 .env
 .env.*
 
+# Local scan history
+data/*.db
+data/*.sqlite3
+
 # IDEs
 .vscode/
 .idea/

@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
 from dotenv import load_dotenv  # ✅ Load .env file
 
-from routes import scan  # from routes.scan import router as scan_router
+from routes import cases, scan  # from routes.scan import router as scan_router
 from middleware.error_handler import UnifiedErrorHandlerMiddleware
 from logger import logger
 
@@ -45,6 +45,7 @@ app.add_middleware(UnifiedErrorHandlerMiddleware)
 
 # ✅ Register routes
 app.include_router(scan.router, prefix="/api", tags=["Scan"])
+app.include_router(cases.router, prefix="/api", tags=["Cases"])
 logger.info("Scan routes registered under /api")
 
 # ✅ Dashboard route

@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/style.css?v=case-panel-2" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230d6efd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 2l7 3v6c0 5-3.5 9-7 11-3.5-2-7-6-7-11V5l7-3z'/></svg>" />
 </head>
 <body>
@@ -158,6 +158,27 @@
       <button id="exportCsvBtn"><span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M19 2H8a2 2 0 00-2 2v3H5a3 3 0 00-3 3v7a3 3 0 003 3h11a3 3 0 003-3V4a2 2 0 00-2-2zm-6 14h-2l-1-2-1 2H7l1.5-3L7 10h2l1 2 1-2h2l-1.5 3L13 16zm4-8H8V4h9v4z"/></svg></span> <span>Export CSV</span></button>
       <button id="exportJsonBtn"><span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M7 7h2v2H7v6h2v2H5V7h2zm12 0v10h-4v-2h2V9h-2V7h4zM11 7h2v2h-2V7zm0 4h2v2h-2v-2zm0 4h2v2h-2v-2z"/></svg></span> <span>Export JSON</span></button>
     </div>
+    <section id="casePanel" class="case-panel" style="display: none;" aria-labelledby="caseTitle">
+      <div class="case-panel-heading">
+        <h2 id="caseTitle">Save scan as a case</h2>
+        <p>Keep this scan and its evidence together for follow-up.</p>
+      </div>
+      <div class="case-form">
+        <label class="case-field case-title-field">Case title<input id="caseNameInput" type="text" maxlength="160" placeholder="e.g. Credential phishing review" /></label>
+        <label class="case-field case-tags-field">Tags<input id="caseTagsInput" type="text" placeholder="phishing, priority" /></label>
+        <label class="case-field case-note-field">Initial note<textarea id="caseNoteInput" maxlength="4000" placeholder="Add context for the next analyst (optional)"></textarea></label>
+        <button id="saveCaseBtn" class="case-action">Save case</button>
+      </div>
+      <div class="case-history">
+        <label class="case-field case-saved-field" for="savedCases">Saved cases<select id="savedCases"><option value="">Loading cases…</option></select></label>
+        <button id="loadCaseBtn" class="case-action secondary">Open case</button>
+      </div>
+      <div id="caseDetails" class="case-details" hidden></div>
+      <div id="caseNoteControls" class="case-history" hidden>
+        <label class="case-field case-new-note-field">Add note<input id="newCaseNote" maxlength="4000" placeholder="Add an analyst note" /></label>
+        <button id="addCaseNoteBtn" class="case-action secondary">Add note</button>
+      </div>
+    </section>
   </div>
 
   <!-- Drag and Drop Overlay -->
@@ -469,6 +490,7 @@
         // Display results table and export controls
         document.getElementById('resultTableWrapper').style.display = 'block';
         document.getElementById('exportControls').style.display = 'flex';
+        document.getElementById('casePanel').style.display = 'block';
         
         // Re-enable scan button
         scanBtn.disabled = false;
@@ -485,6 +507,102 @@
     }
 
     let currentScanResults = [];
+    let activeCaseId = null;
+
+    function setCaseDetails(caseData) {
+      const detail = document.getElementById('caseDetails');
+      if (!caseData) {
+        detail.hidden = true;
+        return;
+      }
+      const tags = (caseData.tags || []).join(', ') || 'No tags';
+      const notes = (caseData.notes || []).map(note => `<li>${note.body}</li>`).join('') || '<li>No notes yet.</li>';
+      detail.innerHTML = `<strong>${caseData.title}</strong><div>${caseData.result_count} URLs · ${caseData.malicious_count} malicious · ${caseData.suspicious_count} suspicious</div><div>Tags: ${tags}</div><div><strong>Notes</strong><ul>${notes}</ul></div>`;
+      detail.hidden = false;
+    }
+
+    async function refreshSavedCases() {
+      const select = document.getElementById('savedCases');
+      try {
+        const response = await fetch('/api/cases');
+        if (!response.ok) throw new Error('Could not load saved cases');
+        const cases = await response.json();
+        select.innerHTML = '<option value="">Select a saved case</option>' + cases.map(item =>
+          `<option value="${item.id}">${item.title} (${item.result_count} URLs)</option>`
+        ).join('');
+      } catch (error) {
+        select.innerHTML = '<option value="">Saved cases unavailable</option>';
+      }
+    }
+
+    async function saveCurrentCase() {
+      if (!currentScanResults.length) return;
+      const title = document.getElementById('caseNameInput').value.trim();
+      if (!title) {
+        showToast('Enter a case title first.', 'error');
+        return;
+      }
+      const tags = document.getElementById('caseTagsInput').value.split(',').map(tag => tag.trim()).filter(Boolean);
+      const note = document.getElementById('caseNoteInput').value.trim();
+      const response = await fetch('/api/cases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, tags, note, results: currentScanResults })
+      });
+      if (!response.ok) {
+        showToast('Could not save this case.', 'error');
+        return;
+      }
+      const savedCase = await response.json();
+      activeCaseId = savedCase.id;
+      document.getElementById('caseNoteControls').hidden = false;
+      setCaseDetails(savedCase);
+      await refreshSavedCases();
+      document.getElementById('savedCases').value = String(savedCase.id);
+      showToast('Case saved.', 'success');
+    }
+
+    async function openSelectedCase() {
+      const caseId = document.getElementById('savedCases').value;
+      if (!caseId) return;
+      const response = await fetch(`/api/cases/${caseId}`);
+      if (!response.ok) {
+        showToast('Could not open that case.', 'error');
+        return;
+      }
+      const savedCase = await response.json();
+      activeCaseId = savedCase.id;
+      currentScanResults = savedCase.results || [];
+      const tbody = document.querySelector('#resultTable tbody');
+      tbody.innerHTML = '';
+      currentScanResults.forEach(appendResultRow);
+      updateScanSummary(currentScanResults);
+      document.getElementById('resultTableWrapper').style.display = 'block';
+      document.getElementById('searchFilters').style.display = 'block';
+      document.getElementById('exportControls').style.display = 'flex';
+      document.getElementById('casePanel').style.display = 'block';
+      document.getElementById('caseNoteControls').hidden = false;
+      setCaseDetails(savedCase);
+      showToast('Case opened.', 'success');
+    }
+
+    async function addNoteToActiveCase() {
+      const bodyInput = document.getElementById('newCaseNote');
+      const body = bodyInput.value.trim();
+      if (!activeCaseId || !body) return;
+      const response = await fetch(`/api/cases/${activeCaseId}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body })
+      });
+      if (!response.ok) {
+        showToast('Could not add note.', 'error');
+        return;
+      }
+      bodyInput.value = '';
+      setCaseDetails(await response.json());
+      showToast('Note added.', 'success');
+    }
 
     document.getElementById('copyBtn').addEventListener('click', function() {
       if (currentScanResults.length === 0) {
@@ -696,7 +814,9 @@
       document.getElementById('searchFilters').style.display = 'none';
       document.getElementById('resultTableWrapper').style.display = 'none';
       document.getElementById('exportControls').style.display = 'none';
+      document.getElementById('casePanel').style.display = 'none';
       currentScanResults = [];
+      activeCaseId = null;
       document.getElementById('urlInput').value = '';
       document.getElementById('urlFileInput').value = '';
       
@@ -831,6 +951,10 @@
       initializeUrlInputNormalization();
       wireAutoscan();
       fetchVTStatus();
+      refreshSavedCases();
+      document.getElementById('saveCaseBtn').addEventListener('click', saveCurrentCase);
+      document.getElementById('loadCaseBtn').addEventListener('click', openSelectedCase);
+      document.getElementById('addCaseNoteBtn').addEventListener('click', addNoteToActiveCase);
     });
 
     // Progress bar functions

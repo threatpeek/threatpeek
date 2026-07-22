@@ -34,6 +34,12 @@ class Config:
     
     # Rate limiting
     RATE_LIMIT_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
+
+    # Local scan history and cases
+    CASE_DATABASE_PATH: str = os.getenv(
+        "CASE_DATABASE_PATH",
+        os.path.join(os.path.dirname(__file__), "data", "threatpeek.db"),
+    )
     
     @classmethod
     def validate(cls) -> bool:
