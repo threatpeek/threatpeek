@@ -5,7 +5,7 @@ import httpx
 import socket
 import os
 from dotenv import load_dotenv
-from typing import List
+from typing import Any, List
 import base64
 from pydantic import BaseModel
 from models.scan_models import URLScanRequest, URLScanResponse
@@ -43,6 +43,117 @@ HEADERS = {
 VT_API_KEY = os.getenv("VT_API_KEY")
 VT_BASE_URL = "https://www.virustotal.com/api/v3/urls"
 
+def _defang_url_for_csv(url: str) -> str:
+    """Defang URL by replacing dots with [.] to reduce accidental clicking in exports."""
+    return url.replace(".", "[.]")
+
+
+async def _inspect_redirect_chain(url: str) -> tuple[List[dict[str, Any]], List[str]]:
+    """Follow a URL and return a compact, analyst-friendly redirect trail.
+
+    The final response is included as the last hop so callers can see where the
+    request ended even when no redirect occurred. Network failures are evidence,
+    not a scan failure: the reputation lookup can still continue.
+    """
+    try:
+        async with httpx.AsyncClient(
+            timeout=config.HTTP_TIMEOUT,
+            headers=HEADERS,
+            follow_redirects=True,
+            max_redirects=10,
+        ) as client:
+            response = await client.get(url)
+
+        responses = [*response.history, response]
+        chain = [
+            {"url": str(item.url), "status_code": item.status_code}
+            for item in responses
+        ]
+        factors: List[str] = []
+        if len(chain) > 1:
+            factors.append(f"Followed {len(chain) - 1} redirect hop(s)")
+
+        origin_domain = registrable_domain(urlparse(url).hostname)
+        destination_domain = registrable_domain(urlparse(str(response.url)).hostname)
+        if origin_domain and destination_domain and origin_domain != destination_domain:
+            factors.append(f"Redirected from {origin_domain} to {destination_domain}")
+        if response.status_code >= 400:
+            factors.append(f"Final HTTP response was {response.status_code}")
+        return chain, factors
+    except httpx.RequestError as exc:
+        return [], [f"Redirect inspection failed: {exc.__class__.__name__}"]
+
+
+def _risk_assessment(
+    status: str,
+    *,
+    base_factors: List[str] | None = None,
+    vendors: dict[str, str] | None = None,
+) -> tuple[int, List[str]]:
+    """Create a bounded score with reasons that can be shown directly to users."""
+    factors = list(base_factors or [])
+    if status == "invalid":
+        return 0, factors or ["URL could not be scanned"]
+
+    score = 0
+    if status == "malicious":
+        score += 70
+        factors.insert(0, "VirusTotal classified this URL as malicious")
+    elif status == "suspicious":
+        score += 40
+
+    vendor_values = [str(value).lower() for value in (vendors or {}).values()]
+    malicious_count = vendor_values.count("malicious")
+    suspicious_count = vendor_values.count("suspicious")
+    if malicious_count:
+        score += min(25, malicious_count * 8)
+        factors.append(f"{malicious_count} VirusTotal vendor(s) marked it malicious")
+    if suspicious_count:
+        score += min(15, suspicious_count * 4)
+        factors.append(f"{suspicious_count} VirusTotal vendor(s) marked it suspicious")
+
+    for factor in factors:
+        if factor.startswith("Redirected from"):
+            score += 15
+        elif factor.startswith("Followed "):
+            score += 5
+        elif factor.startswith("Final HTTP response was"):
+            score += 10
+        elif factor.startswith("SSL:"):
+            score += 30
+        elif "entropy" in factor.lower():
+            score += 25
+        elif "path unusually long" in factor.lower():
+            score += 15
+
+    return min(score, 100), factors or ["No risk indicators observed"]
+
+
+def _scan_response(
+    *,
+    url: str,
+    status: str,
+    details: str,
+    global_rank: int | None,
+    rank_bucket: str | None,
+    rank_source: str | None,
+    vendors: dict[str, str] | None = None,
+    risk_factors: List[str] | None = None,
+    redirect_chain: List[dict[str, Any]] | None = None,
+) -> URLScanResponse:
+    score, factors = _risk_assessment(status, base_factors=risk_factors, vendors=vendors)
+    return URLScanResponse(
+        url=url,
+        status=status,
+        details=details,
+        vendors=vendors,
+        global_rank=global_rank,
+        rank_bucket=rank_bucket,
+        rank_source=rank_source,
+        risk_score=score,
+        risk_factors=factors,
+        redirect_chain=redirect_chain or [],
+    )
 
 
 
@@ -202,7 +313,7 @@ async def _do_scan_urls(payload: URLScanRequest) -> List[URLScanResponse]:
             status = "suspicious"
             detail = f"Unsupported scheme: {parsed.scheme} — non-HTTP protocol"
             log_request(url, status, detail)
-            results.append(URLScanResponse(url=url, status=status, details=detail, global_rank=gr, rank_bucket=rb, rank_source=rsrc))
+            results.append(_scan_response(url=url, status=status, details=detail, global_rank=gr, rank_bucket=rb, rank_source=rsrc, risk_factors=[detail]))
             continue
 
         # 2) Domain sanity
@@ -210,7 +321,7 @@ async def _do_scan_urls(payload: URLScanRequest) -> List[URLScanResponse]:
             status = "invalid"
             detail = "Invalid domain"
             log_request(url, status, detail)
-            results.append(URLScanResponse(url=url, status=status, details=detail, global_rank=gr, rank_bucket=rb, rank_source=rsrc))
+            results.append(_scan_response(url=url, status=status, details=detail, global_rank=gr, rank_bucket=rb, rank_source=rsrc, risk_factors=[detail]))
             continue
 
         # 3) DNS resolution (per-request cache)
@@ -226,7 +337,7 @@ async def _do_scan_urls(payload: URLScanRequest) -> List[URLScanResponse]:
             status = "invalid"
             detail = "DNS resolution failed"
             log_request(url, status, detail)
-            results.append(URLScanResponse(url=url, status=status, details=detail, global_rank=gr, rank_bucket=rb, rank_source=rsrc))
+            results.append(_scan_response(url=url, status=status, details=detail, global_rank=gr, rank_bucket=rb, rank_source=rsrc, risk_factors=[detail]))
             continue
 
         # 4) SSL check for HTTPS (per-request cache)
@@ -240,7 +351,7 @@ async def _do_scan_urls(payload: URLScanRequest) -> List[URLScanResponse]:
                 status = "suspicious"
                 detail = "SSL: " + " | ".join(ssl_issues)
                 log_request(url, status, detail)
-                results.append(URLScanResponse(url=url, status=status, details=detail, global_rank=gr, rank_bucket=rb, rank_source=rsrc))
+                results.append(_scan_response(url=url, status=status, details=detail, global_rank=gr, rank_bucket=rb, rank_source=rsrc, risk_factors=[detail]))
                 continue
 
         # 5) Path heuristics
@@ -248,17 +359,20 @@ async def _do_scan_urls(payload: URLScanRequest) -> List[URLScanResponse]:
             status = "suspicious"
             detail = "URL path unusually long"
             log_request(url, status, detail)
-            results.append(URLScanResponse(url=url, status=status, details=detail, global_rank=gr, rank_bucket=rb, rank_source=rsrc))
+            results.append(_scan_response(url=url, status=status, details=detail, global_rank=gr, rank_bucket=rb, rank_source=rsrc, risk_factors=[detail]))
             continue
 
         if is_high_entropy(path):
             status = "suspicious"
             detail = "High entropy in path"
             log_request(url, status, detail)
-            results.append(URLScanResponse(url=url, status=status, details=detail, global_rank=gr, rank_bucket=rb, rank_source=rsrc))
+            results.append(_scan_response(url=url, status=status, details=detail, global_rank=gr, rank_bucket=rb, rank_source=rsrc, risk_factors=[detail]))
             continue
 
-        # 6) VirusTotal (authoritative verdict after heuristics pass)
+        # 6) Follow redirects before reputation lookup, so analysts can see the final destination.
+        redirect_chain, redirect_factors = await _inspect_redirect_chain(url)
+
+        # 7) VirusTotal (authoritative verdict after heuristics pass)
         vt_status, vt_detail, vendors = await query_virustotal(url)
         log_request(url, vt_status, vt_detail)
         include_vendors = vendors if vt_status in ("malicious", "suspicious") and vendors else None
@@ -267,13 +381,24 @@ async def _do_scan_urls(payload: URLScanRequest) -> List[URLScanResponse]:
             flagged = [f"{k}:{v}" for k, v in include_vendors.items() if v not in ("harmless", "undetected")]
             if flagged:
                 logger.info("Vendors flagged: " + ", ".join(flagged))
-        results.append(URLScanResponse(url=url, status=vt_status, details=vt_detail, vendors=include_vendors, global_rank=gr, rank_bucket=rb, rank_source=rsrc))
+        results.append(_scan_response(
+            url=url,
+            status=vt_status,
+            details=vt_detail,
+            vendors=include_vendors,
+            global_rank=gr,
+            rank_bucket=rb,
+            rank_source=rsrc,
+            risk_factors=[*redirect_factors, vt_detail],
+            redirect_chain=redirect_chain,
+        ))
 
     return results
 
 
 async def scan_urls(payload: URLScanRequest):
     return await _do_scan_urls(payload)
+
 @router.post("/scan_urls", response_model=List[URLScanResponse])
 @limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute")
 async def scan_urls_endpoint(request: Request, payload: URLScanRequest):
@@ -291,14 +416,16 @@ async def export_scan_results_csv(request: Request, payload: URLScanRequest):
     writer = csv.writer(output)
     
     # Write header
-    writer.writerow(['URL', 'Status', 'Details', 'GlobalRank', 'RankBucket', 'Timestamp'])
+    writer.writerow(['URL', 'Status', 'RiskScore', 'RiskFactors', 'Details', 'GlobalRank', 'RankBucket', 'Timestamp'])
     
     # Write data rows
     timestamp = datetime.utcnow().isoformat()
     for result in results:
         writer.writerow([
-            result.url,
+            _defang_url_for_csv(result.url),
             result.status,
+            result.risk_score,
+            " | ".join(result.risk_factors),
             result.details,
             result.global_rank if getattr(result, 'global_rank', None) is not None else '',
             result.rank_bucket or '',
@@ -337,7 +464,10 @@ async def export_scan_results_json(request: Request, payload: URLScanRequest):
                 "details": result.details,
                 "vendors": result.vendors,
                 "global_rank": result.global_rank,
-                "rank_bucket": result.rank_bucket
+                "rank_bucket": result.rank_bucket,
+                "risk_score": result.risk_score,
+                "risk_factors": result.risk_factors,
+                "redirect_chain": result.redirect_chain,
             }
             for result in results
         ]

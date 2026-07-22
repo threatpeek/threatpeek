@@ -53,6 +53,12 @@ class URLScanResponse(BaseModel):
     global_rank: Optional[int] = None
     rank_bucket: Optional[str] = Field(None, description="Top 10k, Top 100k, Top 1M, or Not in Top 1M")
     rank_source: Optional[str] = Field(None, description="Source of ranking data (e.g., tranco)")
+    risk_score: int = Field(0, ge=0, le=100, description="Explainable URL risk score from 0 to 100")
+    risk_factors: List[str] = Field(default_factory=list, description="Evidence used to calculate the risk score")
+    redirect_chain: List[Dict[str, object]] = Field(
+        default_factory=list,
+        description="Observed HTTP redirect hops, including the final response",
+    )
     
 class ScanSummary(BaseModel):
     total_urls: int

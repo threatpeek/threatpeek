@@ -56,7 +56,7 @@ HTTP endpoints (as implemented)
 - API router (prefixed /api): routes/scan.py
   - POST /api/scan_url: body {"url": "https://example.com"} → returns dict with url/status/details/global_rank/rank_bucket/rank_source (legacy compatibility route)
   - POST /api/scan_urls: body {"urls": ["https://example.com", ...]} → returns List[URLScanResponse]
-  - POST /api/export/csv: body same as scan_urls → returns CSV download
+  - POST /api/export/csv: body same as scan_urls → returns CSV download with defanged URLs (every `.` replaced with `[.]` in URL column)
   - POST /api/export/json: body same as scan_urls → returns JSON download
   - GET /api/status/config: returns {"vt_present": bool, "rank_present": bool}
 - Dashboard
@@ -102,6 +102,7 @@ High-level architecture
   - Configures a named logger "threatpeek" with console handler and a helper log_request(url, status, detail) used by the scan flow.
 - Frontend: templates/threatpeek_frontend.html and static/
   - A single-page HTML UI that posts to the API and renders summary stats/charts. Served via /dashboard. Styling/scripts loaded from /static.
+  - CSV exports generated from dashboard results defang URLs by replacing `.` with `[.]` in the URL column.
 - CI/CD: .github/workflows/tests.yml
   - Runs on push/PR to main. Sets up Python 3.11, installs requirements.txt + pytest-cov + respx + anyio, runs pytest with coverage over tests/. Uploads .coverage as artifact.
 
@@ -180,4 +181,6 @@ Changelog
   - Added tldextract and slowapi-related dependency chain to requirements.txt.
   - Updated utils/analysis_helpers.is_high_entropy to default to config.ENTROPY_THRESHOLD.
   - Updated scanner/threat_scanner.py to call query_virustotal (existing API) instead of a non-existent async symbol.
+  - Updated CSV exports to defang URLs in the URL column by replacing each `.` with `[.]` to reduce accidental clicks.
+  - Updated dashboard client-side CSV export to defang URLs in the URL column as well.
 

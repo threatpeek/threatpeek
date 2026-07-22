@@ -144,6 +144,7 @@
           <tr>
             <th>URL</th>
             <th>Status</th>
+            <th>Risk</th>
             <th>Details</th>
             <th>Rank</th>
           </tr>
@@ -518,13 +519,15 @@
         return;
       }
 
-      const csvHeader = 'URL,Status,Details,GlobalRank,RankBucket,Timestamp\n';
+      const csvHeader = 'URL,Status,RiskScore,RiskFactors,Details,GlobalRank,RankBucket,Timestamp\n';
       const csvRows = currentScanResults.map(result => {
         const timestamp = new Date().toISOString();
         const cleanDetails = result.details.replace(/\"/g, '\"\"');
+        const riskFactors = (result.risk_factors || []).join(' | ').replace(/\"/g, '\"\"');
+        const defangedUrl = String(result.url || '').replace(/\./g, '[.]');
         const gr = (result.global_rank ?? '')
         const rb = (result.rank_bucket ?? '')
-        return `\"${result.url}\",\"${result.status}\",\"${cleanDetails}\",\"${gr}\",\"${rb}\",\"${timestamp}\"`;
+        return `\"${defangedUrl}\",\"${result.status}\",\"${result.risk_score ?? 0}\",\"${riskFactors}\",\"${cleanDetails}\",\"${gr}\",\"${rb}\",\"${timestamp}\"`;
       }).join('\n');
 
       const csvContent = csvHeader + csvRows;
@@ -546,7 +549,10 @@
           details: result.details,
           vendors: result.vendors || null,
           global_rank: result.global_rank ?? null,
-          rank_bucket: result.rank_bucket ?? null
+          rank_bucket: result.rank_bucket ?? null,
+          risk_score: result.risk_score ?? 0,
+          risk_factors: result.risk_factors || [],
+          redirect_chain: result.redirect_chain || []
         }))
       };
 
@@ -602,13 +608,26 @@
           </details>
         `;
       }
+      const riskScore = Number(result.risk_score || 0);
+      const riskClass = riskScore >= 70 ? 'red' : riskScore >= 40 ? 'orange' : 'green';
+      const riskEvidence = (result.risk_factors || []).map(factor => `<li>${factor}</li>`).join('');
+      const redirectHops = (result.redirect_chain || [])
+        .map(hop => `<li>${hop.status_code}: ${hop.url}</li>`).join('');
+      const evidenceHtml = (riskEvidence || redirectHops) ? `
+        <details class="scan-evidence">
+          <summary>Risk evidence</summary>
+          ${riskEvidence ? `<ul>${riskEvidence}</ul>` : ''}
+          ${redirectHops ? `<div><strong>Request path</strong><ul>${redirectHops}</ul></div>` : ''}
+        </details>
+      ` : '';
       const row = document.createElement("tr");
       const rankText = result.rank_bucket ? result.rank_bucket : '—';
       const rankTitle = result.global_rank ? ` title="#${result.global_rank}"` : '';
       row.innerHTML = `
         <td>${result.url}</td>
         <td class="status ${colorClass}">${result.status}</td>
-        <td>${result.details || ''}${vendorsHtml}</td>
+        <td class="status ${riskClass}" title="Risk score out of 100">${riskScore}/100</td>
+        <td>${result.details || ''}${evidenceHtml}${vendorsHtml}</td>
         <td${rankTitle}>${rankText}</td>
       `;
       tbody.appendChild(row);
